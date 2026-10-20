@@ -1,36 +1,78 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ReelMind
 
-## Getting Started
+Веб-приложение для сохранения ссылок (Instagram, YouTube, статьи и любые URL) и автоматической сортировки по категориям (здоровье, мотивация, бизнес, ИИ-сервисы и др.). У каждого пользователя свой каталог.
 
-First, run the development server:
+## Локальный запуск (фаза 1)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+1. Скопируйте переменные окружения:
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+   ```bash
+   cp .env.example .env.local
+   ```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+2. Установите зависимости и поднимите БД:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+   ```bash
+   npm install
+   npm run db:setup
+   ```
 
-## Learn More
+3. Запустите dev-сервер:
 
-To learn more about Next.js, take a look at the following resources:
+   ```bash
+   npm run dev
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+4. Откройте [http://localhost:3000](http://localhost:3000), зарегистрируйтесь и добавьте первую ссылку.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### AI-классификация
 
-## Deploy on Vercel
+Добавьте в `.env.local` один из ключей (приоритет сверху вниз):
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `GOOGLE_GENERATIVE_AI_API_KEY` или `GEMINI_API_KEY` (`gemini-3.5-flash-lite` для категорий и поиска, `gemini-embedding-001` для смысла)
+- `OPENAI_API_KEY` (запасной вариант эмбеддингов и классификации)
+- `ANTHROPIC_API_KEY`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Без ключа работает упрощённая keyword-классификация; поиск — только по словам. С ключом Gemini каталог ищет и по смыслу.
+
+### Превью на карточках
+
+- **Реальные сохранения:** картинка берётся из Open Graph / YouTube oEmbed / Instagram oEmbed (`META_OEMBED_ACCESS_TOKEN` для Instagram). Это превью **конкретной ссылки**, не «фото категории».
+- **Если превью нет:** fallback (цвет + emoji категории). Для новой категории достаточно `CATEGORY_SEED` с emoji и color.
+- **Demo seed / `USE_MOCK_DATA`:** стабильные picsum-превью по `id` записи (`demoThumbnailUrl`) только для демо.
+
+### Добавление ссылок
+
+- **Вручную:** [http://localhost:3000/add](http://localhost:3000/add) — любой URL + опционально заметка.
+- **Share (PWA):** установите приложение на телефон (нужен HTTPS). Share target ведёт на `/share`. На localhost удобнее tunnel (ngrok / Cloudflare Tunnel) или `next dev -H 0.0.0.0` в LAN.
+
+## Стек
+
+- Next.js 16, React, TypeScript, Tailwind
+- SQLite `local.db` (libSQL) + Drizzle ORM
+- Vercel AI SDK
+
+## API (кратко)
+
+| Метод | Путь | Описание |
+|-------|------|----------|
+| POST | `/api/items/ingest` | `{ url?, text? }`, нужна сессия |
+| GET | `/api/items?category=` | Список сохранений текущего пользователя |
+| GET | `/api/categories` | Категории и счётчики |
+| PATCH | `/api/items/[id]` | `{ categorySlug }` |
+
+Формы в UI используют Server Actions — секрет в браузер не нужен.
+
+## Моки
+
+`USE_MOCK_DATA=true` — in-memory данные без SQLite (только для вёрстки).
+
+## Деплой (Vercel + Turso)
+
+1. Проверьте production-сборку: `npm run build`
+2. Создайте БД Turso, прогоните `db:push`, `db:seed`, `admin:sync` с prod URL
+3. Подключите репозиторий к Vercel и задайте переменные из [Context/DEPLOY.md](Context/DEPLOY.md)
+
+Шаблон env: `.env.example` (файл можно коммитить; секреты — только в Vercel / `.env.local`).
+
+Контекст проекта: [Context/README.md](Context/README.md), план: [Context/PLAN.md](Context/PLAN.md)
