@@ -11,7 +11,8 @@
     "db:seed": "tsx src/lib/db/seed.ts",
     "admin:sync": "tsx scripts/ensure-admin.mjs",
     "db:setup": "npm run db:push && npm run db:seed",
-    "db:setup:remote": "npm run db:push && npm run db:seed && npm run admin:sync"
+    "db:setup:remote": "npm run db:push && npm run db:seed && npm run admin:sync",
+    "icons:pwa": "node scripts/generate-pwa-icons.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.83",
@@ -36,6 +37,7 @@
     "drizzle-kit": "^0.31.11",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
+    "sharp": "^0.35.5",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5"

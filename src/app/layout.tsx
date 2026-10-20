@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Onest, Unbounded } from "next/font/google";
 
+import { IosInstallHint } from "@/components/IosInstallHint";
+import { PwaRegister } from "@/components/PwaRegister";
 import { ThemeScript } from "@/components/ThemeScript";
 import { ToastProvider } from "@/components/Toast";
 
@@ -23,14 +25,28 @@ export const metadata: Metadata = {
   description: "Ссылки из Instagram, YouTube и любых сайтов, автоматически разложенные по категориям",
   applicationName: "ReelMind",
   manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
   appleWebApp: {
     capable: true,
     title: "ReelMind",
+    statusBarStyle: "black-translucent",
+  },
+  formatDetection: {
+    telephone: false,
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#eef1f8",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#eef1f8" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0c12" },
+  ],
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
@@ -47,7 +63,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <ThemeScript />
       </head>
       <body className="min-h-full bg-paper text-ink">
-        <ToastProvider>{children}</ToastProvider>
+        <PwaRegister />
+        <ToastProvider>
+          {children}
+          <IosInstallHint />
+        </ToastProvider>
       </body>
     </html>
   );

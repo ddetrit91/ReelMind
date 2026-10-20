@@ -1,5 +1,38 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <rect width="512" height="512" rx="96" fill="#5b5ef7"/>
-  <path d="M128 160h256v48H128v-48zm0 96h176v48H128v-48zm0 96h256v48H128v-48z" fill="#fff"/>
-  <circle cx="360" cy="328" r="56" fill="#9ae6ff"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" role="img" aria-label="ReelMind">
+  <defs>
+    <linearGradient id="bg" x1="64" y1="32" x2="448" y2="480" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0a0c12"/>
+      <stop offset="0.45" stop-color="#141a2e"/>
+      <stop offset="1" stop-color="#1e1638"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="128" y1="128" x2="384" y2="384" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5b7cff"/>
+      <stop offset="0.55" stop-color="#2b4dff"/>
+      <stop offset="1" stop-color="#9ae6ff"/>
+    </linearGradient>
+    <linearGradient id="spark" x1="280" y1="160" x2="380" y2="260" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#c8d4ff" stop-opacity="0.2"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <circle cx="256" cy="268" r="148" stroke="url(#ring)" stroke-width="28" stroke-linecap="round" stroke-dasharray="72 40" filter="url(#glow)"/>
+  <circle cx="256" cy="268" r="88" stroke="url(#ring)" stroke-width="14" stroke-opacity="0.55"/>
+  <path
+    fill="url(#spark)"
+    d="M256 108c-18 42-8 78 28 98-34 6-58 28-64 62 48-22 96-18 132 18-26-44-22-92 12-132-28 8-56 4-76-14 8-12 8-24-32-32z"
+  />
+  <path
+    fill="#2b4dff"
+    d="M196 368h120c8 0 14 6 14 14v36c0 6-5 10-11 10H193c-6 0-11-4-11-10v-36c0-8 6-14 14-14z"
+    opacity="0.9"
+  />
+  <path fill="#eef1f8" d="M256 332 196 368v52l60-36 60 36v-52l-60-36z"/>
 </svg>
