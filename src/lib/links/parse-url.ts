@@ -3,6 +3,7 @@ export type ContentType = "video" | "photo" | "carousel" | "article" | "unknown"
 export type SourceKind =
   | "instagram"
   | "youtube"
+  | "dzen"
   | "tiktok"
   | "telegram"
   | "twitter"
@@ -170,6 +171,17 @@ export function parseSourceUrl(raw: string): ParsedSourceUrl {
     };
   }
 
+  if (host.includes("dzen.ru") || host.includes("zen.yandex")) {
+    const isVideo = path.includes("/video/") || path.includes("/watch/");
+    return {
+      normalizedUrl,
+      host,
+      sourceKind: "dzen",
+      mediaKind: isVideo ? "video" : "article",
+      contentType: isVideo ? "video" : "article",
+    };
+  }
+
   if (host.includes("tiktok.com")) {
     return {
       normalizedUrl,
@@ -233,6 +245,7 @@ export function sourceLabel(kind: SourceKind, mediaKind?: string): string {
   if (kind === "instagram" && mediaKind === "reel") return "Reels";
   if (kind === "instagram") return "Instagram";
   if (kind === "youtube") return "YouTube";
+  if (kind === "dzen") return "Дзен";
   if (kind === "tiktok") return "TikTok";
   if (kind === "telegram") return "Telegram";
   if (kind === "twitter") return "X";
@@ -243,6 +256,7 @@ export function sourceLabel(kind: SourceKind, mediaKind?: string): string {
 export function openSourceLabel(kind: SourceKind): string {
   if (kind === "instagram") return "Открыть в Instagram";
   if (kind === "youtube") return "Открыть на YouTube";
+  if (kind === "dzen") return "Открыть в Дзене";
   if (kind === "tiktok") return "Открыть в TikTok";
   if (kind === "telegram") return "Открыть в Telegram";
   if (kind === "twitter") return "Открыть в X";

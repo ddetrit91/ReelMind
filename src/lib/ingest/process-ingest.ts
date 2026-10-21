@@ -7,6 +7,7 @@ import { CATEGORY_SEED, isCategorySlug } from "@/lib/categories";
 import { getDb } from "@/lib/db/client";
 import { categories, items } from "@/lib/db/schema";
 import { useMockData } from "@/lib/env";
+import { quickDisplayTitle } from "@/lib/links/display-text";
 import { fetchLinkMetadata } from "@/lib/links/metadata";
 import {
   extractUrl,
@@ -27,27 +28,6 @@ export type IngestInput = {
 export type IngestResult =
   | { ok: true; id: string; categorySlug: string; duplicate?: boolean }
   | { ok: false; error: string };
-
-function quickTitle(url: string, shareText?: string): string {
-  const note = shareText?.trim();
-  if (note) {
-    const firstLine = note.split(/\n/)[0]?.trim();
-    if (firstLine && !/^https?:\/\//i.test(firstLine)) {
-      return firstLine.slice(0, 120);
-    }
-  }
-  try {
-    const parsed = new URL(url);
-    const path = parsed.pathname.replace(/\/+/g, "/").replace(/\/$/, "");
-    if (path && path !== "/") {
-      const last = decodeURIComponent(path.split("/").filter(Boolean).pop() ?? "");
-      if (last) return last.replace(/[-_]+/g, " ").slice(0, 120);
-    }
-    return parsed.hostname.replace(/^www\./, "");
-  } catch {
-    return "Сохранённая ссылка";
-  }
-}
 
 function quickThumbnail(url: string, sourceKind: string): string | null {
   if (sourceKind !== "youtube") return null;
@@ -193,7 +173,7 @@ export async function processIngest(input: IngestInput): Promise<IngestResult> {
   const categoryId = category?.id ?? "cat-other";
   const id = randomUUID();
   const now = new Date().toISOString();
-  const title = quickTitle(parsed.normalizedUrl, input.text);
+  const title = quickDisplayTitle(parsed.normalizedUrl, input.text, parsed.sourceKind);
   const thumbnailUrl = quickThumbnail(parsed.normalizedUrl, parsed.sourceKind);
 
   await db.insert(items).values({

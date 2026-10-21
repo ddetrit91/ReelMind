@@ -1,5 +1,10 @@
 import { fetchInstagramMetadata } from "@/lib/instagram/metadata";
-import { cleanDisplayTitle, decodeHtmlEntities } from "@/lib/links/display-text";
+import {
+  cleanDisplayTitle,
+  decodeHtmlEntities,
+  isJunkTitle,
+  quickDisplayTitle,
+} from "@/lib/links/display-text";
 import {
   extractYoutubeVideoId,
   youtubeThumbnailUrl,
@@ -13,8 +18,8 @@ export type LinkMetadata = {
 };
 
 /** Keep metadata enrichment snappy; slow hosts should not block UX. */
-const FETCH_TIMEOUT_MS = 2500;
-const MAX_HTML_BYTES = 400_000;
+const FETCH_TIMEOUT_MS = 2800;
+const MAX_HTML_BYTES = 500_000;
 
 function metaContent(html: string, property: string): string | undefined {
   const patterns = [
@@ -71,13 +76,94 @@ async function fetchYoutubeOembed(url: string): Promise<LinkMetadata> {
   }
 }
 
-async function fetchOpenGraph(url: string): Promise<LinkMetadata> {
+/**
+ * Дзен: OG often blocked / noisy; try SSR `_params` JSON for real title.
+ */
+function parseDzenSsr(html: string): LinkMetadata {
+  const result: LinkMetadata = {};
+
+  // _params = ({...ssrData...})
+  const paramsMatch = html.match(
+    /(?:var|let|const)\s+_params\s*=\s*\(\s*(\{[\s\S]*?\})\s*\)\s*;?/,
+  );
+  if (paramsMatch?.[1]) {
+    try {
+      const parsed = JSON.parse(paramsMatch[1]) as {
+        ssrData?: {
+          videoMetaResponse?: {
+            title?: string;
+            description?: string;
+            image?: string;
+            thumbnail?: string;
+          };
+        };
+      };
+      const meta = parsed.ssrData?.videoMetaResponse;
+      if (meta?.title && !isJunkTitle(meta.title)) result.title = meta.title;
+      if (meta?.description) result.caption = meta.description;
+      if (meta?.image || meta?.thumbnail) {
+        result.thumbnailUrl = meta.image ?? meta.thumbnail;
+      }
+    } catch {
+      // fall through to regex probes
+    }
+  }
+
+  if (!result.title) {
+    const titleMatch = html.match(
+      /"videoMetaResponse"\s*:\s*\{[^}]*?"title"\s*:\s*"((?:\\.|[^"\\])*)"/,
+    );
+    if (titleMatch?.[1]) {
+      const title = decodeHtmlEntities(titleMatch[1].replace(/\\"/g, '"').replace(/\\n/g, " "));
+      if (!isJunkTitle(title)) result.title = title;
+    }
+  }
+
+  if (!result.caption) {
+    const descMatch = html.match(
+      /"videoMetaResponse"\s*:\s*\{[^}]*?"description"\s*:\s*"((?:\\.|[^"\\])*)"/,
+    );
+    if (descMatch?.[1]) {
+      result.caption = decodeHtmlEntities(
+        descMatch[1].replace(/\\"/g, '"').replace(/\\n/g, " "),
+      );
+    }
+  }
+
+  return result;
+}
+
+function parseHtmlMetadata(html: string, sourceKind?: SourceKind): LinkMetadata {
+  const fromSsr = sourceKind === "dzen" ? parseDzenSsr(html) : {};
+  const title =
+    fromSsr.title ??
+    metaContent(html, "og:title") ??
+    metaContent(html, "twitter:title") ??
+    documentTitle(html);
+  const thumbnailUrl =
+    fromSsr.thumbnailUrl ??
+    metaContent(html, "og:image") ??
+    metaContent(html, "og:image:url") ??
+    metaContent(html, "twitter:image");
+  const caption =
+    fromSsr.caption ??
+    metaContent(html, "og:description") ??
+    metaContent(html, "description");
+
+  return { title, thumbnailUrl, caption };
+}
+
+async function fetchPageMetadata(
+  url: string,
+  sourceKind?: SourceKind,
+): Promise<LinkMetadata> {
   const res = await fetch(url, {
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     headers: {
       Accept: "text/html,application/xhtml+xml",
       "User-Agent":
-        "Mozilla/5.0 (compatible; ReelMind/0.1; +https://localhost) AppleWebKit/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+      "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.5",
     },
     redirect: "follow",
   });
@@ -91,7 +177,7 @@ async function fetchOpenGraph(url: string): Promise<LinkMetadata> {
   const reader = res.body?.getReader();
   if (!reader) {
     const html = (await res.text()).slice(0, MAX_HTML_BYTES);
-    return parseHtmlMetadata(html);
+    return parseHtmlMetadata(html, sourceKind);
   }
 
   const chunks: Uint8Array[] = [];
@@ -104,36 +190,7 @@ async function fetchOpenGraph(url: string): Promise<LinkMetadata> {
   }
   await reader.cancel().catch(() => undefined);
   const html = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf8");
-  return parseHtmlMetadata(html);
-}
-
-function parseHtmlMetadata(html: string): LinkMetadata {
-  const title =
-    metaContent(html, "og:title") ??
-    metaContent(html, "twitter:title") ??
-    documentTitle(html);
-  const thumbnailUrl =
-    metaContent(html, "og:image") ??
-    metaContent(html, "og:image:url") ??
-    metaContent(html, "twitter:image");
-  const caption =
-    metaContent(html, "og:description") ?? metaContent(html, "description");
-
-  return { title, thumbnailUrl, caption };
-}
-
-function fallbackTitle(url: string): string {
-  try {
-    const parsed = new URL(url);
-    const path = parsed.pathname.replace(/\/+/g, "/").replace(/\/$/, "");
-    if (path && path !== "/") {
-      const last = decodeURIComponent(path.split("/").filter(Boolean).pop() ?? "");
-      if (last) return last.replace(/[-_]+/g, " ");
-    }
-    return parsed.hostname.replace(/^www\./, "");
-  } catch {
-    return "Сохранённая ссылка";
-  }
+  return parseHtmlMetadata(html, sourceKind);
 }
 
 export async function fetchLinkMetadata(
@@ -149,6 +206,8 @@ export async function fetchLinkMetadata(
       collected = await fetchInstagramMetadata(url, shareText);
     } else if (sourceKind === "youtube") {
       collected = await fetchYoutubeOembed(url);
+    } else if (sourceKind === "dzen") {
+      collected = await fetchPageMetadata(url, "dzen");
     }
   } catch {
     // next fallback
@@ -156,7 +215,7 @@ export async function fetchLinkMetadata(
 
   if (!collected.title || !collected.thumbnailUrl) {
     try {
-      const og = await fetchOpenGraph(url);
+      const og = await fetchPageMetadata(url, sourceKind);
       collected = {
         title: collected.title ?? og.title,
         thumbnailUrl: collected.thumbnailUrl ?? og.thumbnailUrl,
@@ -167,12 +226,14 @@ export async function fetchLinkMetadata(
     }
   }
 
-  const rawTitle = collected.title?.trim() || fallbackTitle(url);
+  const friendlyFallback = quickDisplayTitle(url, captionFromShare, sourceKind);
+  const rawTitle = collected.title?.trim();
   const rawCaption = captionFromShare ?? collected.caption ?? rawTitle;
+
   const title = cleanDisplayTitle(rawTitle, {
     sourceKind,
-    shareText: captionFromShare,
-    fallback: sourceKind === "instagram" ? "Instagram Reels" : fallbackTitle(url),
+    shareText: captionFromShare ?? collected.caption,
+    fallback: friendlyFallback,
   });
   const caption = cleanDisplayTitle(rawCaption, {
     sourceKind,

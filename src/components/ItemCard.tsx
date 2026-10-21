@@ -28,9 +28,9 @@ type Props = {
 
 export function ItemCard({ item }: Props) {
   const [gone, setGone] = useState(false);
-  const label = cleanDisplayTitle(item.title ?? item.aiSummary, {
+  const label = cleanDisplayTitle(item.title ?? item.caption ?? item.aiSummary, {
     sourceKind: item.sourceKind,
-    shareText: item.shareText,
+    shareText: item.shareText ?? item.caption,
     fallback: sourceLabel(item.sourceKind, item.mediaKind),
   });
   const color = categoryColor(item.categorySlug);
