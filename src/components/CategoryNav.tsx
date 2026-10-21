@@ -34,6 +34,7 @@ export function CategoryNav({
   searchQuery,
   onSelectCategory,
 }: Props) {
+  const softNav = Boolean(onSelectCategory);
   const linkClass = (active: boolean) =>
     [
       "focus-ring transition-colors",
@@ -60,7 +61,7 @@ export function CategoryNav({
       <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:hidden">
         <Link
           href={catalogHref(undefined, searchQuery)}
-          prefetch
+          prefetch={!softNav}
           scroll={false}
           onClick={(e) => handleClick(e, undefined)}
           className={linkClass(!activeSlug)}
@@ -72,7 +73,7 @@ export function CategoryNav({
           <Link
             key={cat.id}
             href={catalogHref(cat.slug, searchQuery)}
-            prefetch
+            prefetch={!softNav}
             scroll={false}
             onClick={(e) => handleClick(e, cat.slug)}
             className={linkClass(activeSlug === cat.slug)}
@@ -92,7 +93,7 @@ export function CategoryNav({
     <nav className="hidden lg:flex lg:flex-col lg:gap-1" aria-label="Категории">
       <Link
         href={catalogHref(undefined, searchQuery)}
-        prefetch
+        prefetch={!softNav}
         scroll={false}
         onClick={(e) => handleClick(e, undefined)}
         className={linkClass(!activeSlug)}
@@ -104,7 +105,7 @@ export function CategoryNav({
         <Link
           key={cat.id}
           href={catalogHref(cat.slug, searchQuery)}
-          prefetch
+          prefetch={!softNav}
           scroll={false}
           onClick={(e) => handleClick(e, cat.slug)}
           className={linkClass(activeSlug === cat.slug)}

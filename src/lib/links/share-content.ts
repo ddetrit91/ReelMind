@@ -1,24 +1,6 @@
 import { extractUrl } from "@/lib/links/parse-url";
 
 /**
- * Platforms where OG/oEmbed often returns empty junk — require a user note for the title.
- */
-export function sourceNeedsManualNote(url: string | null | undefined): boolean {
-  if (!url?.trim()) return false;
-  try {
-    const host = new URL(url.includes("://") ? url : `https://${url}`).hostname.toLowerCase();
-    return (
-      host.includes("instagram.com") ||
-      host.includes("dzen.ru") ||
-      host.includes("zen.yandex") ||
-      host.includes("tiktok.com")
-    );
-  } catch {
-    return false;
-  }
-}
-
-/**
  * Split a share/clipboard blob into URL + human note.
  * Instagram / TikTok often send: "caption text…\nhttps://instagram.com/reel/…"
  */

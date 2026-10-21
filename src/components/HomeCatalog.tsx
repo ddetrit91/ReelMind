@@ -1,15 +1,19 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { AppShell } from "@/components/AppShell";
+import { CatalogGrid } from "@/components/CatalogGrid";
 import { CatalogSearch } from "@/components/CatalogSearch";
-import { CategoryHero } from "@/components/CategoryHero";
 import { CategorySwipe } from "@/components/CategorySwipe";
-import { EmptyState } from "@/components/EmptyState";
-import { ItemCard } from "@/components/ItemCard";
-import { SearchEmptyState } from "@/components/SearchEmptyState";
 import type { AuthUser } from "@/lib/auth/session";
 import { CATEGORY_SEED, categoryCoverUrl } from "@/lib/categories";
 import type { CategoryWithCount, ItemWithCategory } from "@/lib/data/items";
@@ -47,13 +51,24 @@ function hrefFor(category: string | undefined, query: string | undefined) {
   return qs ? `/?${qs}` : "/";
 }
 
-function visibleItems(
-  all: ItemWithCategory[],
-  slug: string | undefined,
-  query: string | undefined,
-) {
-  const inCat = slug ? all.filter((item) => item.categorySlug === slug) : all;
-  return filterItemsByKeyword(inCat, query);
+function indexItemsByCategory(all: ItemWithCategory[]) {
+  const bySlug = new Map<string, ItemWithCategory[]>();
+  for (const item of all) {
+    const bucket = bySlug.get(item.categorySlug);
+    if (bucket) bucket.push(item);
+    else bySlug.set(item.categorySlug, [item]);
+  }
+  return bySlug;
+}
+
+function readCatalogParams() {
+  if (typeof window === "undefined") {
+    return { category: undefined as string | undefined, query: undefined as string | undefined };
+  }
+  const params = new URLSearchParams(window.location.search);
+  const category = params.get("category") || undefined;
+  const query = params.get("q")?.trim() || undefined;
+  return { category, query };
 }
 
 export function HomeCatalog({
@@ -71,6 +86,8 @@ export function HomeCatalog({
   const categoryRef = useRef(initialCategory);
   const queryRef = useRef(initialQuery);
   const allRef = useRef(initialItems);
+  const interactingRef = useRef(false);
+  const interactTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     allRef.current = initialItems;
@@ -82,24 +99,48 @@ export function HomeCatalog({
     setQuery(initialQuery);
   }, [initialCategories, initialItems, initialCategory, initialQuery]);
 
-  const items = useMemo(
-    () => visibleItems(allItems, category, query),
-    [allItems, category, query],
+  const itemsByCategory = useMemo(() => indexItemsByCategory(allItems), [allItems]);
+
+  const items = useMemo(() => {
+    const inCat = category ? itemsByCategory.get(category) ?? [] : allItems;
+    return filterItemsByKeyword(inCat, query);
+  }, [allItems, category, query, itemsByCategory]);
+
+  const markInteracting = useCallback(() => {
+    interactingRef.current = true;
+    if (interactTimerRef.current != null) {
+      window.clearTimeout(interactTimerRef.current);
+    }
+    interactTimerRef.current = window.setTimeout(() => {
+      interactingRef.current = false;
+    }, 1200);
+  }, []);
+
+  const loadCategory = useCallback(
+    (slug: string | undefined) => {
+      if (slug === categoryRef.current) return;
+      markInteracting();
+      categoryRef.current = slug;
+      startTransition(() => {
+        setCategory(slug);
+      });
+      window.history.replaceState(window.history.state, "", hrefFor(slug, queryRef.current));
+    },
+    [markInteracting],
   );
 
-  const loadCategory = useCallback((slug: string | undefined) => {
-    if (slug === categoryRef.current) return;
-    categoryRef.current = slug;
-    setCategory(slug);
-    window.history.replaceState(window.history.state, "", hrefFor(slug, queryRef.current));
-  }, []);
-
-  const runSearch = useCallback((nextQuery: string) => {
-    const q = nextQuery.trim() || undefined;
-    queryRef.current = q;
-    setQuery(q);
-    window.history.replaceState(window.history.state, "", hrefFor(categoryRef.current, q));
-  }, []);
+  const runSearch = useCallback(
+    (nextQuery: string) => {
+      markInteracting();
+      const q = nextQuery.trim() || undefined;
+      queryRef.current = q;
+      startTransition(() => {
+        setQuery(q);
+      });
+      window.history.replaceState(window.history.state, "", hrefFor(categoryRef.current, q));
+    },
+    [markInteracting],
+  );
 
   const removeItem = useCallback((id: string) => {
     setAllItems((prev) => {
@@ -120,6 +161,20 @@ export function HomeCatalog({
   }, []);
 
   useEffect(() => {
+    const onPopState = () => {
+      const { category: cat, query: q } = readCatalogParams();
+      categoryRef.current = cat;
+      queryRef.current = q;
+      startTransition(() => {
+        setCategory(cat);
+        setQuery(q);
+      });
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  useEffect(() => {
     router.prefetch("/add");
     if (user.role === "admin") router.prefetch("/admin");
     for (const cat of CATEGORY_SEED) {
@@ -129,29 +184,34 @@ export function HomeCatalog({
     }
   }, [router, user.role]);
 
-  // Quiet background refresh of the full list — never blocks swipe.
+  // Quiet background refresh — one round-trip, never during active category swipe.
   useEffect(() => {
     let cancelled = false;
-    const t = window.setTimeout(() => {
-      void fetch("/api/items", { cache: "no-store" })
+
+    const run = () => {
+      if (cancelled || interactingRef.current) return;
+      void fetch("/api/catalog", { cache: "no-store" })
         .then((res) => (res.ok ? res.json() : null))
-        .then((json: { items?: ItemWithCategory[] } | null) => {
-          if (cancelled || !json?.items) return;
-          allRef.current = json.items;
-          setAllItems(json.items);
-        })
+        .then(
+          (json: { categories?: CategoryWithCount[]; items?: ItemWithCategory[] } | null) => {
+            if (cancelled || interactingRef.current || !json?.items || !json.categories) return;
+            allRef.current = json.items;
+            startTransition(() => {
+              setAllItems(json.items!);
+              setCategories(json.categories!);
+            });
+          },
+        )
         .catch(() => undefined);
-      void fetch("/api/categories", { cache: "no-store" })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((json: { categories?: CategoryWithCount[] } | null) => {
-          if (cancelled || !json?.categories) return;
-          setCategories(json.categories);
-        })
-        .catch(() => undefined);
-    }, 400);
+    };
+
+    const t = window.setTimeout(run, 2500);
     return () => {
       cancelled = true;
       window.clearTimeout(t);
+      if (interactTimerRef.current != null) {
+        window.clearTimeout(interactTimerRef.current);
+      }
     };
   }, []);
 
@@ -178,31 +238,13 @@ export function HomeCatalog({
         <div className="mb-5 lg:mb-6">
           <CatalogSearch query={query} category={category} onSearch={runSearch} />
         </div>
-        {active && !query?.trim() ? (
-          <CategoryHero
-            slug={active.slug}
-            name={active.name}
-            emoji={active.emoji}
-            itemCount={active.itemCount}
-          />
-        ) : !active && !query?.trim() ? (
-          <p className="mb-3 text-xs text-ink-faint lg:hidden">
-            Свайп вправо — следующая категория, влево — предыдущая
-          </p>
-        ) : null}
-        {items.length === 0 ? (
-          query ? (
-            <SearchEmptyState query={query} category={category} />
-          ) : (
-            <EmptyState />
-          )
-        ) : (
-          <div className="grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-3 xl:grid-cols-4">
-            {items.map((item) => (
-              <ItemCard key={item.id} item={item} onDeleted={removeItem} />
-            ))}
-          </div>
-        )}
+        <CatalogGrid
+          items={items}
+          active={active}
+          category={category}
+          query={query}
+          onRemoveItem={removeItem}
+        />
       </CategorySwipe>
     </AppShell>
   );

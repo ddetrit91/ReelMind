@@ -40,7 +40,13 @@ export function ItemThumbnail({
     return (
       <div className={`relative h-full w-full ${aspectClassName} ${className}`}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={imageUrl} alt={alt} className="h-full w-full object-cover" />
+        <img
+          src={imageUrl}
+          alt={alt}
+          loading="lazy"
+          decoding="async"
+          className="h-full w-full object-cover"
+        />
         {!thumbnailUrl ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/25 px-3 text-center">
             <span className="text-3xl" aria-hidden>

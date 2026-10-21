@@ -7,7 +7,7 @@ import { ingestLink } from "@/lib/api-client";
 import type { CategoryWithCount } from "@/lib/data/items";
 import { headlineFromText } from "@/lib/links/display-text";
 import { extractUrl } from "@/lib/links/parse-url";
-import { sourceNeedsManualNote, splitUrlAndNote } from "@/lib/links/share-content";
+import { splitUrlAndNote } from "@/lib/links/share-content";
 
 function isIosDevice(): boolean {
   if (typeof navigator === "undefined") return false;
@@ -45,8 +45,8 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
   }, [initialUrl, initialText]);
 
   const titlePreview = useMemo(() => headlineFromText(text, 90), [text]);
-  const noteRequired = sourceNeedsManualNote(url);
-  const noteMissing = noteRequired && !text.trim();
+  const isInstagram = /instagram\.com/i.test(url);
+  const needsNoteHint = Boolean(url.trim()) && !text.trim();
 
   const applyClipboard = useCallback(async (silent = false) => {
     try {
@@ -145,11 +145,6 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
       return;
     }
 
-    if (sourceNeedsManualNote(finalUrl) && !finalNote) {
-      setError("Напишите заметку — без описания Instagram/Дзен/TikTok не сохраняем карточку.");
-      return;
-    }
-
     startTransition(async () => {
       try {
         const result = await ingestLink({
@@ -174,17 +169,15 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
         >
           <p className="font-display text-sm font-semibold text-ink">Instagram на iPhone</p>
           <p className="mt-1.5 text-ink-muted">
-            В меню «Поделиться» Instagram PWA не появляется (ограничение Apple). Без заметки ссылку
-            Instagram / Дзен / TikTok сохранить нельзя — из заметки делаем заголовок карточки.
+            В меню «Поделиться» Instagram PWA не появляется (ограничение Apple). Если подпись не
+            подтянулась сама — кратко опишите ролик в заметке: из неё сделаем заголовок карточки.
           </p>
           <ol className="mt-2 list-decimal space-y-1 pl-5 text-ink-muted">
             <li>
               Instagram → Поделиться → <strong className="text-ink">Скопировать ссылку</strong>
             </li>
             <li>«Вставить из буфера» ниже</li>
-            <li>
-              <strong className="text-ink">Обязательно</strong> напишите заметку (1–2 фразы)
-            </li>
+            <li>Если заголовка нет — напишите заметку (1–2 фразы)</li>
           </ol>
         </div>
       ) : (
@@ -192,8 +185,8 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
           className="rounded-[var(--radius-lg)] border border-line bg-surface p-4 text-sm leading-relaxed text-ink-muted"
           role="note"
         >
-          Android: Поделиться → ReelMind — если пришла подпись, заметка заполнится сама. Для
-          Instagram / Дзен / TikTok без текста сохранение заблокировано: нужна заметка.
+          На Android: Поделиться в Instagram → ReelMind — часто приходит и ссылка, и подпись. Если
+          подписи нет, напишите заметку: заголовок карточки возьмём из неё.
         </div>
       )}
 
@@ -229,34 +222,25 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
         <label className="flex flex-col gap-2 text-sm">
           <span className="font-medium text-ink">
             Заметка{" "}
-            {noteRequired ? (
-              <span className="text-accent">*</span>
-            ) : (
-              <span className="font-normal text-ink-muted">(необязательно)</span>
-            )}
+            {isInstagram || needsNoteHint ? (
+              <span className="font-normal text-ink-muted">(если Instagram не отдал описание)</span>
+            ) : null}
           </span>
           <textarea
             name="text"
             rows={4}
             value={text}
-            required={noteRequired}
-            aria-required={noteRequired}
-            onChange={(e) => {
-              setText(e.target.value);
-              if (error) setError(null);
-            }}
+            onChange={(e) => setText(e.target.value)}
             placeholder={
-              noteRequired
-                ? "Обязательно: о чём ролик — это станет заголовком карточки"
+              isInstagram
+                ? "Напишите, о чём ролик — это станет заголовком карточки"
                 : "Необязательно. Помогает с заголовком и категорией"
             }
-            className={`focus-ring rounded-[var(--radius-sm)] border bg-paper px-3 py-2 text-base text-ink placeholder:text-ink-faint ${
-              noteMissing ? "border-accent" : "border-line"
-            }`}
+            className="focus-ring rounded-[var(--radius-sm)] border border-line bg-paper px-3 py-2 text-base text-ink placeholder:text-ink-faint"
           />
-          {noteMissing ? (
-            <p className="text-xs font-medium text-accent">
-              Без заметки сохранить нельзя — Instagram / Дзен / TikTok не отдают нормальный заголовок.
+          {needsNoteHint ? (
+            <p className="text-xs text-ink-muted">
+              Метаданные могут не подтянуться. Короткая заметка → нормальный заголовок в каталоге.
             </p>
           ) : null}
           {titlePreview ? (
@@ -291,10 +275,10 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
         ) : null}
         <button
           type="submit"
-          disabled={pending || noteMissing}
+          disabled={pending}
           className="btn-primary focus-ring inline-flex min-h-11 w-full items-center justify-center rounded-[var(--radius-md)] px-4 py-3 text-sm font-semibold disabled:opacity-60"
         >
-          {pending ? "Сохраняем…" : noteMissing ? "Сначала напишите заметку" : "Сохранить"}
+          {pending ? "Сохраняем…" : "Сохранить"}
         </button>
       </form>
     </div>

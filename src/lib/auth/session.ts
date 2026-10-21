@@ -111,17 +111,21 @@ export const getCurrentUser = cache(async (): Promise<AuthUser | null> => {
 });
 
 export async function requireUser(nextPath?: string): Promise<AuthUser> {
-  const user = await getCurrentUser();
+  const needMaintenanceCheck =
+    nextPath !== "/maintenance" && !nextPath?.startsWith("/admin");
+
+  const [user, settings] = await Promise.all([
+    getCurrentUser(),
+    needMaintenanceCheck ? getSettings() : Promise.resolve(null),
+  ]);
+
   if (!user) {
     const suffix = nextPath ? `?next=${encodeURIComponent(nextPath)}` : "";
     redirect(`/login${suffix}`);
   }
 
-  if (nextPath !== "/maintenance" && !nextPath?.startsWith("/admin")) {
-    const settings = await getSettings();
-    if (settings.maintenanceMode && user.role !== "admin") {
-      redirect("/maintenance");
-    }
+  if (settings?.maintenanceMode && user.role !== "admin") {
+    redirect("/maintenance");
   }
 
   return user;

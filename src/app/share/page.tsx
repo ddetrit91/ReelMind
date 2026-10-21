@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { IngestStatus } from "@/components/IngestStatus";
 import { requireUser } from "@/lib/auth/session";
 import { processIngest } from "@/lib/ingest/process-ingest";
-import { noteFromSharePayload, sourceNeedsManualNote } from "@/lib/links/share-content";
+import { noteFromSharePayload } from "@/lib/links/share-content";
 
 type PageProps = {
   searchParams: Promise<{
@@ -28,13 +28,6 @@ export default async function SharePage({ searchParams }: PageProps) {
     if (params.title) qs.set("title", params.title);
     const suffix = qs.toString();
     redirect(suffix ? `/add?${suffix}` : "/add");
-  }
-
-  // Instagram / Dzen / TikTok without caption → force user to write a note on /add
-  if (sourceNeedsManualNote(sourceUrl) && !note.trim()) {
-    const qs = new URLSearchParams();
-    qs.set("url", sourceUrl);
-    redirect(`/add?${qs.toString()}`);
   }
 
   const result = await processIngest({

@@ -7,7 +7,11 @@ import { CATEGORY_SEED, isCategorySlug } from "@/lib/categories";
 import { getDb } from "@/lib/db/client";
 import { categories, items } from "@/lib/db/schema";
 import { useMockData } from "@/lib/env";
-import { quickDisplayTitle } from "@/lib/links/display-text";
+import {
+  isJunkTitle,
+  isPlatformChromeTitle,
+  quickDisplayTitle,
+} from "@/lib/links/display-text";
 import { fetchLinkMetadata } from "@/lib/links/metadata";
 import {
   extractUrl,
@@ -15,7 +19,6 @@ import {
   parseSourceUrl,
   youtubeThumbnailUrl,
 } from "@/lib/links/parse-url";
-import { sourceNeedsManualNote } from "@/lib/links/share-content";
 import { mockIngestItem } from "@/lib/mock/store";
 import { revalidateCatalog } from "@/server/hono/revalidate";
 
@@ -92,12 +95,23 @@ async function enrichSavedItem(input: {
   const categoryId = category?.id ?? "cat-other";
   const now = new Date().toISOString();
 
-  // Prefer user/share note for title when present — Instagram often returns empty/junk OG.
-  const titleFromNote = input.shareText?.trim()
-    ? quickDisplayTitle(input.url, input.shareText, input.sourceKind)
+  // Заметка всегда → заголовок. Без заметки — метаданные, но не английский UI Instagram/Дзен/TikTok.
+  const note = input.shareText?.trim();
+  const titleFromNote = note
+    ? quickDisplayTitle(input.url, note, input.sourceKind)
     : null;
-  const nextTitle = titleFromNote || metadata.title;
-  const nextCaption = input.shareText?.trim() || metadata.caption || nextTitle;
+  const metaTitle = metadata.title?.trim();
+  const usableMeta =
+    metaTitle &&
+    !isJunkTitle(metaTitle, input.sourceKind) &&
+    !isPlatformChromeTitle(metaTitle, input.sourceKind)
+      ? metaTitle
+      : null;
+  const nextTitle =
+    titleFromNote ||
+    usableMeta ||
+    quickDisplayTitle(input.url, null, input.sourceKind);
+  const nextCaption = note || metadata.caption || nextTitle;
 
   await db
     .update(items)
@@ -128,13 +142,6 @@ export async function processIngest(input: IngestInput): Promise<IngestResult> {
 
   if (!rawUrl) {
     return { ok: false, error: "Не найдена ссылка. Вставьте полный URL, начиная с https://" };
-  }
-
-  if (sourceNeedsManualNote(rawUrl) && !input.text?.trim()) {
-    return {
-      ok: false,
-      error: "Напишите заметку — без описания эту ссылку сохранить нельзя.",
-    };
   }
 
   if (useMockData()) {

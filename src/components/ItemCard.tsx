@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { memo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { memo, useRef, useState } from "react";
 
 import { DeleteItemButton } from "@/components/DeleteItemButton";
 import { ItemThumbnail } from "@/components/ItemThumbnail";
@@ -28,6 +29,8 @@ type Props = {
 };
 
 export const ItemCard = memo(function ItemCard({ item, onDeleted }: Props) {
+  const router = useRouter();
+  const detailPrefetched = useRef(false);
   const [gone, setGone] = useState(false);
   const label = cleanDisplayTitle(item.title ?? item.caption ?? item.aiSummary, {
     sourceKind: item.sourceKind,
@@ -38,9 +41,15 @@ export const ItemCard = memo(function ItemCard({ item, onDeleted }: Props) {
 
   if (gone) return null;
 
+  function warmDetailPage() {
+    if (detailPrefetched.current) return;
+    detailPrefetched.current = true;
+    router.prefetch(`/items/${item.id}`);
+  }
+
   return (
     <article
-      className="card-surface group relative flex flex-col overflow-hidden rounded-[var(--radius-md)]"
+      className="card-surface group relative flex flex-col overflow-hidden rounded-[var(--radius-md)] [content-visibility:auto] [contain-intrinsic-size:auto_220px]"
       data-item-id={item.id}
     >
       <DeleteItemButton
@@ -49,7 +58,13 @@ export const ItemCard = memo(function ItemCard({ item, onDeleted }: Props) {
         onDeleteFailed={() => setGone(false)}
         onDeleted={onDeleted}
       />
-      <Link href={`/items/${item.id}`} className="focus-ring flex flex-col" prefetch>
+      <Link
+        href={`/items/${item.id}`}
+        className="focus-ring flex flex-col"
+        prefetch={false}
+        onMouseEnter={warmDetailPage}
+        onFocus={warmDetailPage}
+      >
         {/* Compact landscape cards — same size for every source/category */}
         <div className="relative aspect-[16/10] overflow-hidden bg-paper-deep lg:aspect-video">
           <div className="h-full w-full lg:transition lg:duration-300 lg:group-hover:scale-[1.03]">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 
 import { categoryColor, categoryCoverUrl } from "@/lib/categories";
 
@@ -11,7 +11,7 @@ type Props = {
   itemCount: number;
 };
 
-export function CategoryHero({ slug, name, emoji, itemCount }: Props) {
+export const CategoryHero = memo(function CategoryHero({ slug, name, emoji, itemCount }: Props) {
   const [broken, setBroken] = useState(false);
   const cover = categoryCoverUrl(slug);
   const color = categoryColor(slug);
@@ -53,4 +53,4 @@ export function CategoryHero({ slug, name, emoji, itemCount }: Props) {
       </div>
     </div>
   );
-}
+});

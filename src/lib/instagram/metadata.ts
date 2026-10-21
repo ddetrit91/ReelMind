@@ -1,8 +1,14 @@
-import { cleanDisplayTitle, headlineFromText } from "@/lib/links/display-text";
+import {
+  cleanDisplayTitle,
+  headlineFromText,
+  isJunkTitle,
+  isPlatformChromeTitle,
+} from "@/lib/links/display-text";
 
 /**
  * Instagram has no separate video title (unlike YouTube).
- * oEmbed/OG usually return "user on Instagram: caption…" — we turn that into a short headline.
+ * oEmbed/OG usually return English chrome or "user on Instagram: caption…".
+ * User note (shareText) always becomes the card title when present.
  */
 export async function fetchInstagramMetadata(
   url: string,
@@ -34,28 +40,55 @@ export async function fetchInstagramMetadata(
     }
   }
 
-  const fullCaption = cleanDisplayTitle(oembedTitle ?? captionFromShare, {
-    sourceKind: "instagram",
-    shareText: captionFromShare,
-    fallback: "Instagram",
-  });
-
-  // Prefer a short headline for the card title; keep fuller text as caption.
-  const title =
-    headlineFromText(captionFromShare, 90) ??
-    headlineFromText(oembedTitle, 90) ??
-    fullCaption;
-
-  const caption = captionFromShare
-    ? cleanDisplayTitle(captionFromShare, {
+  // Note → title. Never let English Instagram UI overwrite it.
+  if (captionFromShare) {
+    const title =
+      headlineFromText(captionFromShare, 90) ??
+      cleanDisplayTitle(captionFromShare, {
+        sourceKind: "instagram",
+        shareText: captionFromShare,
+        fallback: "Instagram",
+      });
+    return {
+      title,
+      caption: cleanDisplayTitle(captionFromShare, {
         sourceKind: "instagram",
         fallback: title,
-      })
-    : fullCaption;
+      }),
+      thumbnailUrl,
+    };
+  }
+
+  const usableOembed =
+    oembedTitle &&
+    !isJunkTitle(oembedTitle, "instagram") &&
+    !isPlatformChromeTitle(oembedTitle, "instagram")
+      ? oembedTitle
+      : undefined;
+
+  const title =
+    headlineFromText(usableOembed, 90) ??
+    (usableOembed
+      ? cleanDisplayTitle(usableOembed, {
+          sourceKind: "instagram",
+          fallback: "Instagram",
+        })
+      : "Instagram");
+
+  // If cleaning collapsed to chrome / empty — keep neutral label, not English UI.
+  const safeTitle =
+    !title || isJunkTitle(title, "instagram") || isPlatformChromeTitle(title, "instagram")
+      ? "Instagram"
+      : title;
 
   return {
-    title,
-    caption,
+    title: safeTitle,
+    caption: usableOembed
+      ? cleanDisplayTitle(usableOembed, {
+          sourceKind: "instagram",
+          fallback: safeTitle,
+        })
+      : safeTitle,
     thumbnailUrl,
   };
 }

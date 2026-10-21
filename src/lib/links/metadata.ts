@@ -229,21 +229,32 @@ export async function fetchLinkMetadata(
   const friendlyFallback = quickDisplayTitle(url, captionFromShare, sourceKind);
   const rawTitle = collected.title?.trim();
   const rawCaption = captionFromShare ?? collected.caption ?? rawTitle;
+  const thumbnailUrl = resolveMediaUrl(url, collected.thumbnailUrl);
+
+  // User note always becomes the card title (Instagram/Дзен/TikTok OG is often English junk).
+  if (captionFromShare) {
+    const title = quickDisplayTitle(url, captionFromShare, sourceKind);
+    const caption = cleanDisplayTitle(rawCaption, {
+      sourceKind,
+      shareText: captionFromShare,
+      fallback: title,
+    });
+    return { title, caption, thumbnailUrl };
+  }
 
   const title = cleanDisplayTitle(rawTitle, {
     sourceKind,
-    shareText: captionFromShare ?? collected.caption,
+    shareText: collected.caption,
     fallback: friendlyFallback,
   });
   const caption = cleanDisplayTitle(rawCaption, {
     sourceKind,
-    shareText: captionFromShare,
     fallback: title,
   });
-  const thumbnailUrl = resolveMediaUrl(url, collected.thumbnailUrl);
 
   return {
-    title,
+    title:
+      title && !isJunkTitle(title, sourceKind) ? title : friendlyFallback,
     caption,
     thumbnailUrl,
   };

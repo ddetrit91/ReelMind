@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from "react";
 
 type Props = {
   children: ReactNode;
@@ -45,7 +52,9 @@ export function CategorySwipe({
       const safeIdx = idx < 0 ? 0 : idx;
       const nextIdx = Math.min(sequence.length - 1, Math.max(0, safeIdx + dir));
       if (nextIdx === safeIdx) return;
-      onSelectCategory(sequence[nextIdx] || undefined);
+      startTransition(() => {
+        onSelectCategory(sequence[nextIdx] || undefined);
+      });
     },
     [onSelectCategory, sequence],
   );

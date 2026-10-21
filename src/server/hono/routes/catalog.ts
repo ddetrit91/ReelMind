@@ -11,6 +11,18 @@ import { revalidateCatalog } from "@/server/hono/revalidate";
 
 const catalog = new Hono<ApiEnv>();
 
+/** One auth + parallel DB read for client catalog refresh. */
+catalog.get("/catalog", requireUserMw, async (c) => {
+  const user = c.get("user");
+  const [categories, items] = await Promise.all([
+    listCategoriesWithCounts(user.id),
+    listItems(user.id),
+  ]);
+  return c.json({ categories, items }, 200, {
+    "Cache-Control": "private, no-store",
+  });
+});
+
 catalog.get("/categories", requireUserMw, async (c) => {
   const user = c.get("user");
   const categories = await listCategoriesWithCounts(user.id);

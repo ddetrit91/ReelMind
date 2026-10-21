@@ -128,8 +128,53 @@ const PATH_NOISE = new Set([
   "status",
 ]);
 
+/**
+ * Instagram / TikTok / Дзен UI chrome (often English) — never use as card title.
+ * Real captions in English are still allowed when they look like a normal sentence.
+ */
+export function isPlatformChromeTitle(text: string, sourceKind?: string): boolean {
+  const t = text.trim();
+  if (!t) return true;
+
+  if (
+    /^(watch|see|view|open)\s+(this\s+)?(reel|reels|post|video|photo|clip)\s+on\s+instagram\b/i.test(
+      t,
+    ) ||
+    /^(photo|video|reel|reels)\s+by\s+.+\s+on\s+instagram\b/i.test(t) ||
+    /^instagram\s+(reel|reels|post|video|photo)\b/i.test(t) ||
+    /^login\s*[•·|]\s*instagram$/i.test(t) ||
+    /^create\s+new\s+account\b/i.test(t) ||
+    /^sign\s+up\s+to\s+see\b/i.test(t) ||
+    /^shared\s+(a\s+)?(post|reel|video)\b/i.test(t)
+  ) {
+    return true;
+  }
+
+  if (
+    sourceKind === "tiktok" &&
+    (/^tiktok\s*[-–—|]/i.test(t) || /^make\s+your\s+day$/i.test(t))
+  ) {
+    return true;
+  }
+
+  if (
+    (sourceKind === "dzen" || /дзен|yandex\s*zen|dzen\.ru/i.test(t)) &&
+    (/^(yandex\s*)?zen$/i.test(t) ||
+      /^дзен$/i.test(t) ||
+      /^article\s+from\s+dzen\b/i.test(t) ||
+      /^video\s+from\s+dzen\b/i.test(t))
+  ) {
+    return true;
+  }
+
+  // "username on Instagram" / "username on Instagram:" with empty/no real caption
+  if (/^[a-z0-9._]{2,30}\s+on\s+instagram\s*:?\s*$/i.test(t)) return true;
+
+  return false;
+}
+
 /** Opaque URL ids / route crumbs that should never be shown as a title. */
-export function isJunkTitle(text: string): boolean {
+export function isJunkTitle(text: string, sourceKind?: string): boolean {
   const t = text.trim();
   if (!t) return true;
   if (t.length < 2) return true;
@@ -142,6 +187,7 @@ export function isJunkTitle(text: string): boolean {
   if (/^instagram(\s+reels)?$/i.test(t)) return true;
   if (/^tiktok$/i.test(t)) return true;
   if (/^youtube$/i.test(t)) return true;
+  if (isPlatformChromeTitle(t, sourceKind)) return true;
   return false;
 }
 
@@ -208,6 +254,8 @@ export function headlineFromText(raw: string | null | undefined, maxLen = 90): s
     normalizeFancyLetters(decodeHtmlEntities(stripPlatformNoise(raw))),
   );
   if (isJunkTitle(text) || readableRatio(text) < 0.55) return null;
+  // After stripping chrome, still reject leftover Instagram UI lines
+  if (isPlatformChromeTitle(text)) return null;
 
   // Prefer first line, then first sentence
   const firstLine = text.split(/\n/)[0]?.trim() ?? text;
@@ -247,12 +295,22 @@ export function cleanDisplayTitle(
   const fallback = options?.fallback ?? sourceFallback(options?.sourceKind);
   const share = options?.shareText?.trim();
 
-  const candidates = [share, raw]
+  // Note / share caption always wins over OG/oEmbed (Instagram often sends English chrome).
+  const preferred = share
+    ? [share, raw]
+    : [raw, share];
+
+  const candidates = preferred
     .filter((v): v is string => Boolean(v && v.trim()))
     .map((v) => collapseWhitespace(normalizeFancyLetters(decodeHtmlEntities(v))))
     .map((v) => stripPlatformNoise(v, options?.sourceKind))
     .map((v) => collapseWhitespace(v))
-    .filter((v) => v.length >= 2 && !isJunkTitle(v));
+    .filter(
+      (v) =>
+        v.length >= 2 &&
+        !isJunkTitle(v, options?.sourceKind) &&
+        !isPlatformChromeTitle(v, options?.sourceKind),
+    );
 
   for (const candidate of candidates) {
     if (/&#x?[0-9a-f]+;/i.test(candidate)) continue;
@@ -270,9 +328,9 @@ export function cleanDisplayTitle(
 
   // Last resort: try to pull a headline from share/raw even if earlier filters were strict
   const fromShare = headlineFromText(share, 90);
-  if (fromShare) return fromShare;
+  if (fromShare && !isPlatformChromeTitle(fromShare, options?.sourceKind)) return fromShare;
   const fromRaw = headlineFromText(raw, 90);
-  if (fromRaw) return fromRaw;
+  if (fromRaw && !isPlatformChromeTitle(fromRaw, options?.sourceKind)) return fromRaw;
 
   return fallback;
 }
