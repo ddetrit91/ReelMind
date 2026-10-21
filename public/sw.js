@@ -1,10 +1,18 @@
-/* ReelMind — minimal offline shell for PWA install criteria */
-const CACHE = "reelmind-v2";
-const PRECACHE = ["/", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/add"];
+/* ReelMind — PWA service worker (iOS 16.4+ Home Screen + Android) */
+const CACHE = "reelmind-v3";
+const PRECACHE = [
+  "/manifest.webmanifest",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+  "/apple-touch-icon.png",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)).then(() => self.skipWaiting()),
+    caches
+      .open(CACHE)
+      .then((cache) => cache.addAll(PRECACHE))
+      .then(() => self.skipWaiting()),
   );
 });
 
@@ -22,6 +30,12 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith("/api/")) return;
+
+  // Never cache HTML navigations — iOS PWA must not stick on a cached login page.
+  if (event.request.mode === "navigate") {
+    event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then((cached) => {

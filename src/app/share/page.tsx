@@ -4,8 +4,8 @@ import { redirect } from "next/navigation";
 
 import { IngestStatus } from "@/components/IngestStatus";
 import { requireUser } from "@/lib/auth/session";
-import { extractUrlFromSharePayload } from "@/lib/links/parse-url";
 import { processIngest } from "@/lib/ingest/process-ingest";
+import { noteFromSharePayload, sourceNeedsManualNote } from "@/lib/links/share-content";
 
 type PageProps = {
   searchParams: Promise<{
@@ -18,20 +18,28 @@ type PageProps = {
 export default async function SharePage({ searchParams }: PageProps) {
   const user = await requireUser("/share");
   const params = await searchParams;
-  const sourceUrl = extractUrlFromSharePayload(params);
+  const { url: sourceUrl, note } = noteFromSharePayload(params);
 
-  // Empty share / iOS fallback → add form with clipboard paste
+  // Empty share / iOS fallback → add form (prefill note if any)
   if (!sourceUrl) {
     const qs = new URLSearchParams();
-    if (params.text) qs.set("text", params.text);
+    if (note) qs.set("text", note);
+    else if (params.text) qs.set("text", params.text);
     if (params.title) qs.set("title", params.title);
     const suffix = qs.toString();
     redirect(suffix ? `/add?${suffix}` : "/add");
   }
 
+  // Instagram / Dzen / TikTok without caption → force user to write a note on /add
+  if (sourceNeedsManualNote(sourceUrl) && !note.trim()) {
+    const qs = new URLSearchParams();
+    qs.set("url", sourceUrl);
+    redirect(`/add?${qs.toString()}`);
+  }
+
   const result = await processIngest({
     url: sourceUrl,
-    text: params.text ?? params.title,
+    text: note || undefined,
     userId: user.id,
   });
 

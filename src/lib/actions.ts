@@ -32,7 +32,6 @@ export async function ingestFromForm(
     return { error: result.error };
   }
 
-  revalidateCatalog();
   redirect(`/items/${result.id}`);
 }
 

@@ -68,6 +68,9 @@ html {
   height: 100%;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  /* PWA + Dynamic Island: paint under the status bar; padding is in AppShell */
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
 }
 
 body {

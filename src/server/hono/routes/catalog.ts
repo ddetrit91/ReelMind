@@ -101,7 +101,6 @@ catalog.post("/items/ingest", async (c) => {
     return c.json({ error: result.error }, 400);
   }
 
-  revalidateCatalog();
   return c.json({
     id: result.id,
     categorySlug: result.categorySlug,

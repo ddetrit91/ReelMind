@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import type { MouseEvent } from "react";
 
 import { UserAccountBlock } from "@/components/UserAccountBlock";
 import { CategoryNav } from "@/components/CategoryNav";
@@ -34,11 +36,26 @@ export function AppShell({
   onSelectCategory,
 }: Props) {
   const pageTitle = title ?? "Каталог";
+  const pathname = usePathname();
+
+  function onCatalogClick(event: MouseEvent<HTMLAnchorElement>) {
+    if (pathname !== "/" || !onSelectCategory) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    onSelectCategory(undefined);
+  }
 
   return (
     <div className="min-h-dvh lg:flex">
       <aside className="hidden lg:sticky lg:top-0 lg:flex lg:h-screen lg:w-[272px] lg:shrink-0 lg:flex-col lg:border-r lg:border-line lg:bg-surface/70 lg:px-5 lg:py-7 lg:backdrop-blur-md">
-        <Link href="/" className="focus-ring mb-8 flex items-start gap-3 rounded-[var(--radius-sm)] p-1">
+        <Link
+          href="/"
+          prefetch
+          onClick={onCatalogClick}
+          className="focus-ring mb-8 flex items-start gap-3 rounded-[var(--radius-sm)] p-1"
+        >
           <BookmarkMark className="mt-0.5 h-9 w-9 text-accent" />
           <span>
             <span className="font-display block text-[1.05rem] font-semibold leading-tight tracking-tight text-ink">
@@ -61,6 +78,7 @@ export function AppShell({
           {user?.role === "admin" ? (
             <Link
               href="/admin"
+              prefetch
               className="focus-ring inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] border border-line bg-paper px-4 text-sm font-medium text-ink hover:bg-accent-soft"
             >
               <ShieldIcon className="h-5 w-5 text-accent" />
@@ -151,6 +169,8 @@ export function AppShell({
           <div className="mx-auto flex h-14 max-w-lg items-stretch">
             <Link
               href="/"
+              prefetch
+              onClick={onCatalogClick}
               className="focus-ring flex flex-1 flex-col items-center justify-center gap-1 text-xs font-medium text-ink"
             >
               <GridIcon className="h-5 w-5" />
@@ -158,6 +178,7 @@ export function AppShell({
             </Link>
             <Link
               href="/add"
+              prefetch
               className="focus-ring flex flex-1 flex-col items-center justify-center gap-1 text-xs font-medium text-ink-muted"
             >
               <PlusIcon className="h-5 w-5 text-accent" />
@@ -166,6 +187,7 @@ export function AppShell({
             {user?.role === "admin" ? (
               <Link
                 href="/admin"
+                prefetch
                 className="focus-ring m-1.5 flex flex-1 flex-col items-center justify-center gap-1 rounded-[var(--radius-sm)] border border-line bg-paper text-xs font-semibold text-ink"
               >
                 <ShieldIcon className="h-5 w-5 text-accent" />

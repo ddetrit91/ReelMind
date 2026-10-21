@@ -1,6 +1,15 @@
+import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 
+/** Don't block the API/UI on cache busting. */
 export function revalidateCatalog() {
-  revalidatePath("/");
-  revalidatePath("/items");
+  const run = () => {
+    revalidatePath("/");
+    revalidatePath("/items");
+  };
+  try {
+    after(run);
+  } catch {
+    run();
+  }
 }

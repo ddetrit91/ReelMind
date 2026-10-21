@@ -15,6 +15,7 @@ import {
   parseSourceUrl,
   youtubeThumbnailUrl,
 } from "@/lib/links/parse-url";
+import { sourceNeedsManualNote } from "@/lib/links/share-content";
 import { mockIngestItem } from "@/lib/mock/store";
 import { revalidateCatalog } from "@/server/hono/revalidate";
 
@@ -91,11 +92,18 @@ async function enrichSavedItem(input: {
   const categoryId = category?.id ?? "cat-other";
   const now = new Date().toISOString();
 
+  // Prefer user/share note for title when present — Instagram often returns empty/junk OG.
+  const titleFromNote = input.shareText?.trim()
+    ? quickDisplayTitle(input.url, input.shareText, input.sourceKind)
+    : null;
+  const nextTitle = titleFromNote || metadata.title;
+  const nextCaption = input.shareText?.trim() || metadata.caption || nextTitle;
+
   await db
     .update(items)
     .set({
-      ...(metadata.title ? { title: metadata.title } : {}),
-      ...(metadata.caption ? { caption: metadata.caption } : {}),
+      ...(nextTitle ? { title: nextTitle } : {}),
+      ...(nextCaption ? { caption: nextCaption } : {}),
       ...(metadata.thumbnailUrl ? { thumbnailUrl: metadata.thumbnailUrl } : {}),
       categoryId,
       aiTags: classification.tags,
@@ -120,6 +128,13 @@ export async function processIngest(input: IngestInput): Promise<IngestResult> {
 
   if (!rawUrl) {
     return { ok: false, error: "Не найдена ссылка. Вставьте полный URL, начиная с https://" };
+  }
+
+  if (sourceNeedsManualNote(rawUrl) && !input.text?.trim()) {
+    return {
+      ok: false,
+      error: "Напишите заметку — без описания эту ссылку сохранить нельзя.",
+    };
   }
 
   if (useMockData()) {

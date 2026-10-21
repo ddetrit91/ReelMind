@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-const DISMISS_KEY = "reelmind-ios-install-dismiss";
+const DISMISS_KEY = "reelmind-ios-install-dismiss-v2";
 
 function isIos(): boolean {
   if (typeof navigator === "undefined") return false;
@@ -24,7 +24,7 @@ export function IosInstallHint() {
   useEffect(() => {
     if (!isIos() || isStandalone()) return;
     if (localStorage.getItem(DISMISS_KEY) === "1") return;
-    const t = window.setTimeout(() => setVisible(true), 1200);
+    const t = window.setTimeout(() => setVisible(true), 800);
     return () => window.clearTimeout(t);
   }, []);
 

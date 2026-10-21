@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { memo, useState } from "react";
 
 import { DeleteItemButton } from "@/components/DeleteItemButton";
 import { ItemThumbnail } from "@/components/ItemThumbnail";
@@ -24,9 +24,10 @@ function mediaLabel(item: ItemWithCategory) {
 
 type Props = {
   item: ItemWithCategory;
+  onDeleted?: (itemId: string) => void;
 };
 
-export function ItemCard({ item }: Props) {
+export const ItemCard = memo(function ItemCard({ item, onDeleted }: Props) {
   const [gone, setGone] = useState(false);
   const label = cleanDisplayTitle(item.title ?? item.caption ?? item.aiSummary, {
     sourceKind: item.sourceKind,
@@ -39,17 +40,19 @@ export function ItemCard({ item }: Props) {
 
   return (
     <article
-      className="card-surface group relative flex flex-col overflow-hidden rounded-[var(--radius-lg)]"
+      className="card-surface group relative flex flex-col overflow-hidden rounded-[var(--radius-md)]"
       data-item-id={item.id}
     >
       <DeleteItemButton
         itemId={item.id}
-        onDeleted={() => setGone(true)}
+        onDeleteStart={() => setGone(true)}
+        onDeleteFailed={() => setGone(false)}
+        onDeleted={onDeleted}
       />
       <Link href={`/items/${item.id}`} className="focus-ring flex flex-col" prefetch>
-        {/* Единый размер карточек в сетке (Instagram больше не выше YouTube). */}
-        <div className="relative aspect-[4/5] overflow-hidden bg-paper-deep lg:aspect-[4/5]">
-          <div className="h-full w-full transition duration-300 group-hover:scale-[1.03]">
+        {/* Compact landscape cards — same size for every source/category */}
+        <div className="relative aspect-[16/10] overflow-hidden bg-paper-deep lg:aspect-video">
+          <div className="h-full w-full lg:transition lg:duration-300 lg:group-hover:scale-[1.03]">
             <ItemThumbnail
               thumbnailUrl={item.thumbnailUrl}
               categorySlug={item.categorySlug}
@@ -63,21 +66,21 @@ export function ItemCard({ item }: Props) {
               aspectClassName="min-h-full"
             />
           </div>
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent p-3 pt-16">
-            <p className="font-display text-[0.95rem] font-semibold leading-snug text-white line-clamp-2">
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/30 to-transparent px-2.5 pb-2 pt-10">
+            <p className="font-display text-[0.8rem] font-semibold leading-snug text-white line-clamp-2 lg:text-sm">
               {label}
             </p>
           </div>
-          <span className="absolute left-2.5 top-2.5 inline-flex min-h-8 items-center gap-1.5 rounded-full bg-surface/92 px-2.5 text-[11px] font-medium text-ink backdrop-blur-sm">
+          <span className="absolute left-2 top-2 inline-flex min-h-7 items-center gap-1.5 rounded-full bg-surface/92 px-2 text-[10px] font-medium text-ink backdrop-blur-sm lg:text-[11px]">
             <CategoryDot color={color} />
             {item.categoryName}
           </span>
         </div>
-        <div className="flex items-center justify-between gap-2 px-3 py-2.5 text-xs text-ink-faint">
+        <div className="flex items-center justify-between gap-2 px-2.5 py-2 text-[11px] text-ink-faint lg:text-xs">
           <span>{mediaLabel(item)}</span>
           <time dateTime={item.createdAt}>{formatDate(item.createdAt)}</time>
         </div>
       </Link>
     </article>
   );
-}
+});

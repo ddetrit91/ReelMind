@@ -18,7 +18,7 @@ export function CategoryHero({ slug, name, emoji, itemCount }: Props) {
 
   return (
     <div
-      className="relative mb-5 overflow-hidden rounded-[var(--radius-lg)] lg:mb-6"
+      className="relative mb-4 overflow-hidden rounded-[var(--radius-md)] lg:mb-5"
       style={
         broken
           ? {
@@ -32,21 +32,24 @@ export function CategoryHero({ slug, name, emoji, itemCount }: Props) {
         <img
           src={cover}
           alt=""
-          className="h-36 w-full object-cover lg:h-48"
+          decoding="async"
+          className="h-28 w-full object-cover lg:h-36"
           onError={() => setBroken(true)}
         />
       ) : (
-        <div className="h-36 w-full lg:h-48" aria-hidden />
+        <div className="h-28 w-full lg:h-36" aria-hidden />
       )}
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-black/10" />
-      <div className="absolute inset-x-0 bottom-0 p-4 lg:p-6">
-        <p className="font-display text-xl font-semibold text-white lg:text-2xl">
+      <div className="absolute inset-x-0 bottom-0 p-3 lg:p-4">
+        <p className="font-display text-lg font-semibold text-white lg:text-xl">
           <span aria-hidden className="mr-2">
             {emoji}
           </span>
           {name}
         </p>
-        <p className="mt-1 text-sm text-white/80">{itemCount} сохранений в этом разделе</p>
+        <p className="mt-0.5 text-xs text-white/80 lg:text-sm">
+          {itemCount} сохранений в этом разделе
+        </p>
       </div>
     </div>
   );

@@ -1,11 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, useTransition, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
 
 import { ingestLink } from "@/lib/api-client";
 import type { CategoryWithCount } from "@/lib/data/items";
+import { headlineFromText } from "@/lib/links/display-text";
 import { extractUrl } from "@/lib/links/parse-url";
+import { sourceNeedsManualNote, splitUrlAndNote } from "@/lib/links/share-content";
 
 function isIosDevice(): boolean {
   if (typeof navigator === "undefined") return false;
@@ -32,6 +34,20 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
     setShowIosTip(isIosDevice());
   }, []);
 
+  // If opened with share leftovers in one field, split once
+  useEffect(() => {
+    if (initialUrl || !initialText) return;
+    const split = splitUrlAndNote(initialText);
+    if (split.url) {
+      setUrl(split.url);
+      if (split.note) setText(split.note);
+    }
+  }, [initialUrl, initialText]);
+
+  const titlePreview = useMemo(() => headlineFromText(text, 90), [text]);
+  const noteRequired = sourceNeedsManualNote(url);
+  const noteMissing = noteRequired && !text.trim();
+
   const applyClipboard = useCallback(async (silent = false) => {
     try {
       if (!navigator.clipboard?.readText) {
@@ -41,13 +57,19 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
         return false;
       }
       const raw = await navigator.clipboard.readText();
-      const found = extractUrl(raw);
+      const { url: found, note } = splitUrlAndNote(raw);
       if (found) {
         setUrl(found);
-        if (!text.trim() && raw.trim() !== found) {
-          setText(raw.trim().slice(0, 500));
+        if (note) {
+          setText((prev) => (prev.trim() ? prev : note.slice(0, 800)));
+          setPasteHint("Ссылка и текст из буфера подставлены");
+        } else {
+          setPasteHint(
+            /instagram\.com/i.test(found)
+              ? "Ссылка вставлена. Instagram редко кладёт подпись в буфер — напишите заметку ниже, из неё сделаем заголовок."
+              : "Ссылка вставлена из буфера",
+          );
         }
-        setPasteHint("Ссылка вставлена из буфера");
         return true;
       }
       if (!silent) {
@@ -64,7 +86,7 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
       }
       return false;
     }
-  }, [text]);
+  }, []);
 
   useEffect(() => {
     if (!isIosDevice() || url.trim()) return;
@@ -85,16 +107,54 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
     };
   }, [applyClipboard, url]);
 
+  function onUrlChange(value: string) {
+    const split = splitUrlAndNote(value);
+    if (split.url && split.note) {
+      setUrl(split.url);
+      setText((prev) => (prev.trim() ? prev : split.note));
+      return;
+    }
+    setUrl(value);
+  }
+
+  function onPasteUrl(event: React.ClipboardEvent<HTMLInputElement>) {
+    const raw = event.clipboardData.getData("text");
+    const split = splitUrlAndNote(raw);
+    if (!split.url) return;
+    event.preventDefault();
+    setUrl(split.url);
+    if (split.note) {
+      setText((prev) => (prev.trim() ? prev : split.note.slice(0, 800)));
+      setPasteHint("Из вставки взяли ссылку и текст — текст станет заголовком, если Instagram молчит");
+    } else if (/instagram\.com/i.test(split.url)) {
+      setPasteHint("Ссылка есть. Добавьте заметку — так карточка получит нормальный заголовок.");
+    }
+  }
+
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending) return;
     setError(null);
 
+    const cleaned = splitUrlAndNote([url, text].filter(Boolean).join("\n"));
+    const finalUrl = cleaned.url ?? extractUrl(url) ?? url.trim();
+    const finalNote = cleaned.note || text.trim();
+
+    if (!finalUrl) {
+      setError("Вставьте ссылку");
+      return;
+    }
+
+    if (sourceNeedsManualNote(finalUrl) && !finalNote) {
+      setError("Напишите заметку — без описания Instagram/Дзен/TikTok не сохраняем карточку.");
+      return;
+    }
+
     startTransition(async () => {
       try {
         const result = await ingestLink({
-          url: url.trim() || undefined,
-          text: text.trim() || undefined,
+          url: finalUrl,
+          text: finalNote || undefined,
           categorySlug: categorySlug || undefined,
         });
         router.replace(`/items/${result.id}`);
@@ -114,15 +174,17 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
         >
           <p className="font-display text-sm font-semibold text-ink">Instagram на iPhone</p>
           <p className="mt-1.5 text-ink-muted">
-            Apple не показывает PWA в меню «Поделиться» Instagram — это ограничение iOS, не
-            ReelMind. Рабочий путь:
+            В меню «Поделиться» Instagram PWA не появляется (ограничение Apple). Без заметки ссылку
+            Instagram / Дзен / TikTok сохранить нельзя — из заметки делаем заголовок карточки.
           </p>
           <ol className="mt-2 list-decimal space-y-1 pl-5 text-ink-muted">
             <li>
-              В Instagram: Поделиться → <strong className="text-ink">Скопировать ссылку</strong>
+              Instagram → Поделиться → <strong className="text-ink">Скопировать ссылку</strong>
             </li>
-            <li>Откройте ReelMind с домашнего экрана</li>
-            <li>Нажмите «Вставить из буфера» ниже (или поле само подхватит ссылку)</li>
+            <li>«Вставить из буфера» ниже</li>
+            <li>
+              <strong className="text-ink">Обязательно</strong> напишите заметку (1–2 фразы)
+            </li>
           </ol>
         </div>
       ) : (
@@ -130,8 +192,8 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
           className="rounded-[var(--radius-lg)] border border-line bg-surface p-4 text-sm leading-relaxed text-ink-muted"
           role="note"
         >
-          На Android после установки PWA ReelMind появится в «Поделиться» Instagram. На iPhone —
-          только через «Скопировать ссылку» и вставку сюда.
+          Android: Поделиться → ReelMind — если пришла подпись, заметка заполнится сама. Для
+          Instagram / Дзен / TikTok без текста сохранение заблокировано: нужна заметка.
         </div>
       )}
 
@@ -146,7 +208,8 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
             type="url"
             required
             value={url}
-            onChange={(e) => setUrl(e.target.value)}
+            onChange={(e) => onUrlChange(e.target.value)}
+            onPaste={onPasteUrl}
             placeholder="https://… Instagram, YouTube, статья"
             className="focus-ring min-h-11 rounded-[var(--radius-sm)] border border-line bg-paper px-3 py-2 text-base text-ink placeholder:text-ink-faint"
             autoComplete="url"
@@ -162,17 +225,48 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
           </button>
           {pasteHint ? <p className="text-xs text-ink-muted">{pasteHint}</p> : null}
         </label>
+
         <label className="flex flex-col gap-2 text-sm">
-          <span className="font-medium text-ink">Заметка или подпись</span>
+          <span className="font-medium text-ink">
+            Заметка{" "}
+            {noteRequired ? (
+              <span className="text-accent">*</span>
+            ) : (
+              <span className="font-normal text-ink-muted">(необязательно)</span>
+            )}
+          </span>
           <textarea
             name="text"
             rows={4}
             value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Необязательно. Помогает точнее выбрать категорию"
-            className="focus-ring rounded-[var(--radius-sm)] border border-line bg-paper px-3 py-2 text-base text-ink placeholder:text-ink-faint"
+            required={noteRequired}
+            aria-required={noteRequired}
+            onChange={(e) => {
+              setText(e.target.value);
+              if (error) setError(null);
+            }}
+            placeholder={
+              noteRequired
+                ? "Обязательно: о чём ролик — это станет заголовком карточки"
+                : "Необязательно. Помогает с заголовком и категорией"
+            }
+            className={`focus-ring rounded-[var(--radius-sm)] border bg-paper px-3 py-2 text-base text-ink placeholder:text-ink-faint ${
+              noteMissing ? "border-accent" : "border-line"
+            }`}
           />
+          {noteMissing ? (
+            <p className="text-xs font-medium text-accent">
+              Без заметки сохранить нельзя — Instagram / Дзен / TikTok не отдают нормальный заголовок.
+            </p>
+          ) : null}
+          {titlePreview ? (
+            <p className="text-xs text-ink-muted">
+              Заголовок карточки:{" "}
+              <span className="font-medium text-ink">«{titlePreview}»</span>
+            </p>
+          ) : null}
         </label>
+
         <label className="flex flex-col gap-2 text-sm">
           <span className="font-medium text-ink">Категория</span>
           <select
@@ -188,10 +282,8 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
               </option>
             ))}
           </select>
-          <span className="text-xs text-ink-muted">
-            Сохранение мгновенное; уточнение заголовка и категории догружается в фоне.
-          </span>
         </label>
+
         {error ? (
           <p className="rounded-[var(--radius-sm)] bg-accent-soft px-3 py-2 text-sm text-ink">
             {error}
@@ -199,10 +291,10 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
         ) : null}
         <button
           type="submit"
-          disabled={pending}
+          disabled={pending || noteMissing}
           className="btn-primary focus-ring inline-flex min-h-11 w-full items-center justify-center rounded-[var(--radius-md)] px-4 py-3 text-sm font-semibold disabled:opacity-60"
         >
-          {pending ? "Сохраняем…" : "Сохранить"}
+          {pending ? "Сохраняем…" : noteMissing ? "Сначала напишите заметку" : "Сохранить"}
         </button>
       </form>
     </div>

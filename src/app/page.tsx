@@ -10,8 +10,7 @@ type PageProps = {
 
 export default async function HomePage({ searchParams }: PageProps) {
   const [user, params] = await Promise.all([requireUser("/"), searchParams]);
-  const query = params.q?.trim();
-  const { categories, items } = await getCatalogForUi(user.id, params.category, query);
+  const { categories, items } = await getCatalogForUi(user.id);
 
   return (
     <HomeCatalog
@@ -19,7 +18,7 @@ export default async function HomePage({ searchParams }: PageProps) {
       initialCategories={categories}
       initialItems={items}
       initialCategory={params.category}
-      initialQuery={query}
+      initialQuery={params.q?.trim()}
     />
   );
 }

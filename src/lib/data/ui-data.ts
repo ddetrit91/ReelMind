@@ -14,24 +14,12 @@ import {
  * Catalog data for home: one parallel round-trip (categories + items).
  * No demo seed/clear on this hot path.
  */
-export async function getCatalogForUi(
-  userId: string,
-  categorySlug?: string,
-  query?: string,
-) {
+export async function getCatalogForUi(userId: string) {
   const [categories, items] = await Promise.all([
     useMockData() ? Promise.resolve(mockGetCategories()) : listCategoriesDb(userId),
-    useMockData()
-      ? Promise.resolve(mockListItems(categorySlug))
-      : listItemsDb(userId, categorySlug),
+    useMockData() ? Promise.resolve(mockListItems()) : listItemsDb(userId),
   ]);
-
-  if (!query?.trim()) {
-    return { categories, items };
-  }
-
-  const { searchItems } = await import("@/lib/search/item-search");
-  return { categories, items: await searchItems(items, query) };
+  return { categories, items };
 }
 
 export async function getCategoriesForUi(userId: string) {

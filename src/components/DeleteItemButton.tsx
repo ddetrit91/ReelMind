@@ -4,14 +4,18 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition, type MouseEvent } from "react";
 
 import { TrashIcon } from "@/components/icons";
-import { deleteItemAction } from "@/lib/actions";
 
 type Props = {
   itemId: string;
   /** Catalog path after delete from detail page (e.g. `/?category=other`). */
   returnTo?: string;
   variant?: "icon" | "button";
+  /** Fires only after the server confirms deletion. */
   onDeleted?: (itemId: string) => void;
+  /** Optional optimistic hide before the request finishes. */
+  onDeleteStart?: (itemId: string) => void;
+  /** Undo optimistic hide if the request fails. */
+  onDeleteFailed?: (itemId: string) => void;
 };
 
 export function DeleteItemButton({
@@ -19,6 +23,8 @@ export function DeleteItemButton({
   returnTo,
   variant = "icon",
   onDeleted,
+  onDeleteStart,
+  onDeleteFailed,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -32,23 +38,30 @@ export function DeleteItemButton({
     if (!window.confirm("Удалить эту ссылку из каталога?")) return;
 
     setError(null);
+    onDeleteStart?.(itemId);
+
     startTransition(async () => {
-      const result = await deleteItemAction(itemId);
-      if ("error" in result && result.error) {
-        setError(result.error);
+      try {
+        const res = await fetch(`/api/items/${encodeURIComponent(itemId)}`, {
+          method: "DELETE",
+        });
+        if (!res.ok) {
+          const data = (await res.json().catch(() => ({}))) as { error?: string };
+          onDeleteFailed?.(itemId);
+          setError(data.error ?? "Не удалось удалить");
+          return;
+        }
+        onDeleted?.(itemId);
+      } catch {
+        onDeleteFailed?.(itemId);
+        setError("Не удалось удалить");
         return;
       }
-      onDeleted?.(itemId);
 
       if (variant === "button") {
         const dest = returnTo?.startsWith("/") ? returnTo : "/";
         router.replace(dest);
-        router.refresh();
-        return;
       }
-
-      // Card on catalog: hide immediately, then refresh counts.
-      router.refresh();
     });
   }
 

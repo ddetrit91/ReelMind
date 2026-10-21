@@ -23,5 +23,12 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icons/|manifest.webmanifest).*)"],
+  matcher: [
+    /*
+     * Auth gate for pages only.
+     * Static PWA files MUST stay public or iOS cannot install / run standalone
+     * (sw.js, apple-touch-icon, manifest, icons).
+     */
+    "/((?!_next/static|_next/image|favicon.ico|apple-touch-icon.png|sw.js|icons/|manifest.webmanifest).*)",
+  ],
 };
