@@ -20,11 +20,18 @@ catalog.get("/categories", requireUserMw, async (c) => {
 catalog.get("/items", requireUserMw, async (c) => {
   const user = c.get("user");
   const category = c.req.query("category") || undefined;
-  const q = c.req.query("q") || undefined;
+  const q = c.req.query("q")?.trim() || undefined;
   const base = await listItems(user.id, category);
+  if (!q) {
+    return c.json({ items: base }, 200, {
+      "Cache-Control": "private, no-store",
+    });
+  }
   const { searchItems } = await import("@/lib/search/item-search");
   const items = await searchItems(base, q);
-  return c.json({ items });
+  return c.json({ items }, 200, {
+    "Cache-Control": "private, no-store",
+  });
 });
 
 catalog.get("/items/:id", requireUserMw, async (c) => {

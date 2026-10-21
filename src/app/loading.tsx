@@ -1,15 +1,21 @@
 export default function CatalogLoading() {
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 lg:px-10">
-      <div className="mb-6 h-8 w-48 animate-pulse rounded-md bg-paper-deep" />
-      <div className="mb-6 h-11 w-full max-w-xl animate-pulse rounded-[var(--radius-md)] bg-paper-deep" />
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <div
-            key={i}
-            className="aspect-[4/5] animate-pulse rounded-[var(--radius-lg)] bg-paper-deep"
-          />
-        ))}
+    <div className="min-h-dvh lg:flex">
+      <aside className="hidden lg:block lg:w-[272px] lg:shrink-0 lg:border-r lg:border-line lg:bg-surface/50" />
+      <div className="flex flex-1 flex-col px-4 pt-[max(1rem,env(safe-area-inset-top))] lg:px-10 lg:pt-9">
+        <div className="mx-auto w-full max-w-6xl space-y-5">
+          <div className="h-8 w-40 animate-pulse rounded-md bg-line/70" />
+          <div className="h-4 w-64 animate-pulse rounded-md bg-line/50" />
+          <div className="h-11 w-full animate-pulse rounded-[var(--radius-md)] bg-line/40" />
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div
+                key={i}
+                className="aspect-[3/4] animate-pulse rounded-[var(--radius-md)] bg-line/35"
+              />
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

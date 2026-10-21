@@ -1,4 +1,5 @@
-import { eq } from "drizzle-orm";
+import { cache } from "react";
+import { inArray } from "drizzle-orm";
 
 import { getDb } from "@/lib/db/client";
 import { appSettings } from "@/lib/db/schema";
@@ -12,17 +13,34 @@ const DEFAULTS: Record<string, string> = {
 };
 
 export async function getSetting(key: string): Promise<string> {
-  const db = getDb();
-  const rows = await db.select().from(appSettings).where(eq(appSettings.key, key)).limit(1);
-  return rows[0]?.value ?? DEFAULTS[key] ?? "false";
+  const settings = await getSettings();
+  if (key === SETTING_ALLOW_REGISTRATION) {
+    return settings.allowRegistration ? "true" : "false";
+  }
+  if (key === SETTING_MAINTENANCE) {
+    return settings.maintenanceMode ? "true" : "false";
+  }
+  return DEFAULTS[key] ?? "false";
 }
 
-export async function getSettings() {
+/** One DB round-trip per request (React cache). */
+export const getSettings = cache(async () => {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(appSettings)
+    .where(
+      inArray(appSettings.key, [SETTING_ALLOW_REGISTRATION, SETTING_MAINTENANCE]),
+    );
+
+  const map = new Map(rows.map((row) => [row.key, row.value]));
   return {
-    allowRegistration: (await getSetting(SETTING_ALLOW_REGISTRATION)) === "true",
-    maintenanceMode: (await getSetting(SETTING_MAINTENANCE)) === "true",
+    allowRegistration:
+      (map.get(SETTING_ALLOW_REGISTRATION) ?? DEFAULTS[SETTING_ALLOW_REGISTRATION]) === "true",
+    maintenanceMode:
+      (map.get(SETTING_MAINTENANCE) ?? DEFAULTS[SETTING_MAINTENANCE]) === "true",
   };
-}
+});
 
 export async function setSetting(key: string, value: boolean) {
   const db = getDb();

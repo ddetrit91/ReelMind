@@ -103,14 +103,53 @@ export async function listItems(
   const conditions = [eq(items.userId, userId)];
   if (categorySlug) conditions.push(eq(categories.slug, categorySlug));
 
+  // Catalog + search fields only — skip detail-page columns.
   const rows = await db
-    .select({ item: items, category: categories })
+    .select({
+      id: items.id,
+      sourceUrl: items.instagramUrl,
+      sourceKind: items.sourceKind,
+      mediaKind: items.mediaKind,
+      shareText: items.shareText,
+      caption: items.caption,
+      title: items.title,
+      thumbnailUrl: items.thumbnailUrl,
+      categoryId: items.categoryId,
+      categorySlug: categories.slug,
+      categoryName: categories.name,
+      categoryEmoji: categories.emoji,
+      aiTags: items.aiTags,
+      aiSummary: items.aiSummary,
+      status: items.status,
+      createdAt: items.createdAt,
+    })
     .from(items)
     .innerJoin(categories, eq(items.categoryId, categories.id))
     .where(and(...conditions))
     .orderBy(desc(items.createdAt));
 
-  return rows.map(mapItem);
+  return rows.map((row) => ({
+    id: row.id,
+    sourceUrl: row.sourceUrl,
+    sourceKind: (row.sourceKind as SourceKind) || "other",
+    mediaKind: row.mediaKind,
+    contentType: "link",
+    shareText: row.shareText,
+    caption: row.caption,
+    title: row.title,
+    thumbnailUrl: row.thumbnailUrl,
+    categoryId: row.categoryId,
+    categorySlug: row.categorySlug,
+    categoryName: row.categoryName,
+    categoryEmoji: row.categoryEmoji,
+    aiTags: row.aiTags ?? [],
+    aiSummary: row.aiSummary,
+    classificationConfidence: null,
+    status: row.status,
+    errorMessage: null,
+    createdAt: row.createdAt,
+    updatedAt: row.createdAt,
+  }));
 }
 
 export async function getItemById(

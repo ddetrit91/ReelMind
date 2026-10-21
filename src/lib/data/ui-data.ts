@@ -3,7 +3,6 @@ import {
   listItems as listItemsDb,
   getItemById as getItemByIdDb,
 } from "@/lib/data/items";
-import { clearDemoItemsForUser } from "@/lib/demo/ensure-demo-items";
 import { useMockData } from "@/lib/env";
 import {
   mockGetCategories,
@@ -11,22 +10,15 @@ import {
   mockListItems,
 } from "@/lib/mock/store";
 
-const demosCleared = new Set<string>();
-
 /**
  * Catalog data for home: one parallel round-trip (categories + items).
- * Seeded demos are removed once per user (not re-created on auth).
+ * No demo seed/clear on this hot path.
  */
 export async function getCatalogForUi(
   userId: string,
   categorySlug?: string,
   query?: string,
 ) {
-  if (!useMockData() && !demosCleared.has(userId)) {
-    await clearDemoItemsForUser(userId);
-    demosCleared.add(userId);
-  }
-
   const [categories, items] = await Promise.all([
     useMockData() ? Promise.resolve(mockGetCategories()) : listCategoriesDb(userId),
     useMockData()

@@ -91,8 +91,8 @@ export async function loginAction(
   }
 
   await createSession(user.id);
-  // One-time cleanup: drop old seeded demos; user-added links stay.
-  await clearDemoItemsForUser(user.id);
+  // Drop seeded demos once on login (not on every catalog click).
+  void clearDemoItemsForUser(user.id).catch(() => undefined);
   redirect(next);
 }
 

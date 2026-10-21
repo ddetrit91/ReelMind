@@ -1,45 +1,39 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useRef, type ReactNode, type TouchEvent } from "react";
 
 type Props = {
   children: ReactNode;
-  /** Ordered slugs; empty string slot = «Все» at the start */
   categorySlugs: string[];
   activeSlug?: string;
   searchQuery?: string;
+  onSelectCategory?: (slug: string | undefined) => void;
 };
-
-function catalogHref(category: string | undefined, searchQuery?: string) {
-  const params = new URLSearchParams();
-  if (category) params.set("category", category);
-  const q = searchQuery?.trim();
-  if (q) params.set("q", q);
-  const query = params.toString();
-  return query ? `/?${query}` : "/";
-}
 
 /**
  * Mobile: swipe right → next category, swipe left → previous.
- * Ignores mostly-vertical gestures so scrolling still works.
  */
-export function CategorySwipe({ children, categorySlugs, activeSlug, searchQuery }: Props) {
-  const router = useRouter();
+export function CategorySwipe({
+  children,
+  categorySlugs,
+  activeSlug,
+  onSelectCategory,
+}: Props) {
   const start = useRef<{ x: number; y: number; t: number } | null>(null);
   const sequence = useMemo(() => ["", ...categorySlugs], [categorySlugs]);
 
   const go = useCallback(
     (dir: 1 | -1) => {
+      if (!onSelectCategory) return;
       const currentKey = activeSlug ?? "";
       const idx = sequence.indexOf(currentKey);
       const safeIdx = idx < 0 ? 0 : idx;
       const nextIdx = Math.min(sequence.length - 1, Math.max(0, safeIdx + dir));
       if (nextIdx === safeIdx) return;
       const nextSlug = sequence[nextIdx] || undefined;
-      router.push(catalogHref(nextSlug, searchQuery));
+      onSelectCategory(nextSlug);
     },
-    [activeSlug, router, searchQuery, sequence],
+    [activeSlug, onSelectCategory, sequence],
   );
 
   function onTouchStart(event: TouchEvent) {
@@ -62,7 +56,6 @@ export function CategorySwipe({ children, categorySlugs, activeSlug, searchQuery
     if (Math.abs(dx) < Math.abs(dy) * 1.35) return;
     if (dt > 700) return;
 
-    // Swipe right → next category; swipe left → previous
     if (dx > 0) go(1);
     else go(-1);
   }

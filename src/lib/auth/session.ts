@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { cache } from "react";
 
 import { SESSION_COOKIE } from "@/lib/auth/constants";
 import { getDb } from "@/lib/db/client";
@@ -73,7 +74,8 @@ export async function destroySession(): Promise<void> {
   store.delete(SESSION_COOKIE);
 }
 
-export async function getCurrentUser(): Promise<AuthUser | null> {
+/** Deduped per request — avoid repeated session joins on the same RSC render. */
+export const getCurrentUser = cache(async (): Promise<AuthUser | null> => {
   await connection();
   const store = await cookies();
   const id = store.get(SESSION_COOKIE)?.value;
@@ -83,7 +85,10 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   const rows = await db
     .select({
       sessionExpires: sessions.expiresAt,
-      user: users,
+      id: users.id,
+      email: users.email,
+      name: users.name,
+      role: users.role,
     })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
@@ -98,12 +103,12 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   }
 
   return {
-    id: row.user.id,
-    email: row.user.email,
-    name: row.user.name,
-    role: row.user.role === "admin" ? "admin" : "user",
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    role: row.role === "admin" ? "admin" : "user",
   };
-}
+});
 
 export async function requireUser(nextPath?: string): Promise<AuthUser> {
   const user = await getCurrentUser();

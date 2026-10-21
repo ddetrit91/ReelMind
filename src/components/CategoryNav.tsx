@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import type { MouseEvent } from "react";
 
 import { CategoryDot } from "@/components/icons";
 import { categoryColor } from "@/lib/categories";
@@ -10,6 +13,8 @@ type Props = {
   totalCount: number;
   variant: "sidebar" | "rail";
   searchQuery?: string;
+  /** Soft client navigation — skips full RSC reload when provided. */
+  onSelectCategory?: (slug: string | undefined) => void;
 };
 
 function catalogHref(category?: string, searchQuery?: string) {
@@ -27,6 +32,7 @@ export function CategoryNav({
   totalCount,
   variant,
   searchQuery,
+  onSelectCategory,
 }: Props) {
   const linkClass = (active: boolean) =>
     [
@@ -39,10 +45,26 @@ export function CategoryNav({
         : "inline-flex shrink-0 items-center gap-2 rounded-full border border-line px-4 py-2.5 text-sm min-h-11",
     ].join(" ");
 
+  function handleClick(event: MouseEvent<HTMLAnchorElement>, slug?: string) {
+    if (!onSelectCategory) return;
+    // Keep native open-in-new-tab / modified clicks
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    onSelectCategory(slug);
+  }
+
   if (variant === "rail") {
     return (
       <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:hidden">
-        <Link href={catalogHref(undefined, searchQuery)} prefetch className={linkClass(!activeSlug)}>
+        <Link
+          href={catalogHref(undefined, searchQuery)}
+          prefetch
+          scroll={false}
+          onClick={(e) => handleClick(e, undefined)}
+          className={linkClass(!activeSlug)}
+        >
           Все
           <span className="tabular-nums text-xs opacity-80">{totalCount}</span>
         </Link>
@@ -51,6 +73,8 @@ export function CategoryNav({
             key={cat.id}
             href={catalogHref(cat.slug, searchQuery)}
             prefetch
+            scroll={false}
+            onClick={(e) => handleClick(e, cat.slug)}
             className={linkClass(activeSlug === cat.slug)}
           >
             {!activeSlug || activeSlug !== cat.slug ? (
@@ -66,7 +90,13 @@ export function CategoryNav({
 
   return (
     <nav className="hidden lg:flex lg:flex-col lg:gap-1" aria-label="Категории">
-      <Link href={catalogHref(undefined, searchQuery)} prefetch className={linkClass(!activeSlug)}>
+      <Link
+        href={catalogHref(undefined, searchQuery)}
+        prefetch
+        scroll={false}
+        onClick={(e) => handleClick(e, undefined)}
+        className={linkClass(!activeSlug)}
+      >
         <span className="font-medium">Все</span>
         <span className="tabular-nums text-xs opacity-80">{totalCount}</span>
       </Link>
@@ -75,6 +105,8 @@ export function CategoryNav({
           key={cat.id}
           href={catalogHref(cat.slug, searchQuery)}
           prefetch
+          scroll={false}
+          onClick={(e) => handleClick(e, cat.slug)}
           className={linkClass(activeSlug === cat.slug)}
         >
           <span className="flex items-center gap-2 font-medium">

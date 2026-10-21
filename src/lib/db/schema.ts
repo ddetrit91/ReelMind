@@ -96,6 +96,8 @@ export const items = sqliteTable(
   (table) => [
     index("items_category_idx").on(table.categoryId),
     index("items_user_idx").on(table.userId),
+    index("items_user_category_idx").on(table.userId, table.categoryId),
+    index("items_user_created_idx").on(table.userId, table.createdAt),
     uniqueIndex("items_user_url_idx").on(table.userId, table.instagramUrl),
   ],
 );

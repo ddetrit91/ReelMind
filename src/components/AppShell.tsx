@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 
 import { UserAccountBlock } from "@/components/UserAccountBlock";
@@ -17,6 +19,7 @@ type Props = {
   totalItems?: number;
   searchQuery?: string;
   user?: AuthUser | null;
+  onSelectCategory?: (slug: string | undefined) => void;
 };
 
 export function AppShell({
@@ -28,6 +31,7 @@ export function AppShell({
   totalItems = 0,
   searchQuery,
   user,
+  onSelectCategory,
 }: Props) {
   const pageTitle = title ?? "Каталог";
 
@@ -51,6 +55,7 @@ export function AppShell({
           totalCount={totalItems}
           variant="sidebar"
           searchQuery={searchQuery}
+          onSelectCategory={onSelectCategory}
         />
         <div className="mt-auto space-y-4 pt-8">
           {user?.role === "admin" ? (
@@ -64,6 +69,7 @@ export function AppShell({
           ) : null}
           <Link
             href="/add"
+            prefetch
             className="btn-primary focus-ring inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] px-4 text-sm font-semibold"
           >
             <PlusIcon className="h-4 w-4" />
@@ -123,6 +129,7 @@ export function AppShell({
                   totalCount={totalItems}
                   variant="rail"
                   searchQuery={searchQuery}
+                  onSelectCategory={onSelectCategory}
                 />
               </div>
             ) : null}
