@@ -20,15 +20,13 @@ export default async function SharePage({ searchParams }: PageProps) {
   const params = await searchParams;
   const sourceUrl = extractUrlFromSharePayload(params);
 
+  // Empty share / iOS fallback → add form with clipboard paste
   if (!sourceUrl) {
-    return (
-      <div className="mx-auto max-w-lg px-4 py-8">
-        <IngestStatus
-          state="error"
-          message="В share не найдена ссылка. Откройте «Добавить» и вставьте URL вручную."
-        />
-      </div>
-    );
+    const qs = new URLSearchParams();
+    if (params.text) qs.set("text", params.text);
+    if (params.title) qs.set("title", params.title);
+    const suffix = qs.toString();
+    redirect(suffix ? `/add?${suffix}` : "/add");
   }
 
   const result = await processIngest({
@@ -41,6 +39,11 @@ export default async function SharePage({ searchParams }: PageProps) {
     return (
       <div className="mx-auto max-w-lg px-4 py-8">
         <IngestStatus state="error" message={result.error} />
+        <p className="mt-4 text-center text-sm text-ink-muted">
+          <a href="/add" className="font-medium text-accent hover:underline">
+            Открыть форму добавления
+          </a>
+        </p>
       </div>
     );
   }

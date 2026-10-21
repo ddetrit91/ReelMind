@@ -32,7 +32,7 @@ export function AppShell({
   const pageTitle = title ?? "Каталог";
 
   return (
-    <div className="min-h-full lg:flex">
+    <div className="min-h-dvh lg:flex">
       <aside className="hidden lg:sticky lg:top-0 lg:flex lg:h-screen lg:w-[272px] lg:shrink-0 lg:flex-col lg:border-r lg:border-line lg:bg-surface/70 lg:px-5 lg:py-7 lg:backdrop-blur-md">
         <Link href="/" className="focus-ring mb-8 flex items-start gap-3 rounded-[var(--radius-sm)] p-1">
           <BookmarkMark className="mt-0.5 h-9 w-9 text-accent" />
@@ -79,9 +79,10 @@ export function AppShell({
         </div>
       </aside>
 
-      <div className="flex min-h-full flex-1 flex-col">
-        <header className="sticky top-0 z-20 border-b border-line bg-paper/85 px-4 py-3 backdrop-blur-md lg:static lg:border-none lg:bg-transparent lg:px-10 lg:pt-9 lg:pb-0">
-          <div className="mx-auto max-w-6xl space-y-3">
+      <div className="flex min-h-dvh flex-1 flex-col">
+        <header className="sticky top-0 z-20 border-b border-line bg-paper/85 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-md lg:static lg:border-none lg:bg-transparent lg:pb-0 lg:pt-9">
+          {/* Same max-w + px as <main> so title aligns with search & cards on desktop */}
+          <div className="mx-auto w-full min-w-0 max-w-6xl space-y-3 px-4 lg:px-10">
             <div className="flex items-center justify-between gap-3 lg:hidden">
               <div className="flex min-w-0 items-center gap-2">
                 <BookmarkMark className="h-8 w-8 shrink-0 text-accent" />
@@ -114,41 +115,43 @@ export function AppShell({
                 </Link>
               </div>
             </div>
+            {categories.length > 0 ? (
+              <div className="lg:hidden">
+                <CategoryNav
+                  categories={categories}
+                  activeSlug={activeCategorySlug}
+                  totalCount={totalItems}
+                  variant="rail"
+                  searchQuery={searchQuery}
+                />
+              </div>
+            ) : null}
           </div>
-          {categories.length > 0 ? (
-            <div className="mx-auto mt-3 max-w-6xl lg:hidden">
-              <CategoryNav
-                categories={categories}
-                activeSlug={activeCategorySlug}
-                totalCount={totalItems}
-                variant="rail"
-                searchQuery={searchQuery}
-              />
-            </div>
-          ) : null}
         </header>
 
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-24 pt-4 lg:px-10 lg:pb-12 lg:pt-7">
+        {/* pb = высота tab bar (3.5rem) + safe-area, без лишнего «воздуха» под навбаром */}
+        <main className="mx-auto w-full min-w-0 max-w-6xl flex-1 px-4 pb-[calc(3.5rem+env(safe-area-inset-bottom,0px)+0.75rem)] pt-4 lg:px-10 lg:pb-12 lg:pt-7">
           {children}
         </main>
 
         <Onboarding isAdmin={user?.role === "admin"} />
 
         <nav
-          className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden"
+          className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 backdrop-blur-md lg:hidden"
+          style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
           aria-label="Основная навигация"
         >
-          <div className="mx-auto flex max-w-lg">
+          <div className="mx-auto flex h-14 max-w-lg items-stretch">
             <Link
               href="/"
-              className="focus-ring flex min-h-14 flex-1 flex-col items-center justify-center gap-1 text-xs font-medium text-ink"
+              className="focus-ring flex flex-1 flex-col items-center justify-center gap-1 text-xs font-medium text-ink"
             >
               <GridIcon className="h-5 w-5" />
               Каталог
             </Link>
             <Link
               href="/add"
-              className="focus-ring flex min-h-14 flex-1 flex-col items-center justify-center gap-1 text-xs font-medium text-ink-muted"
+              className="focus-ring flex flex-1 flex-col items-center justify-center gap-1 text-xs font-medium text-ink-muted"
             >
               <PlusIcon className="h-5 w-5 text-accent" />
               Добавить
@@ -156,7 +159,7 @@ export function AppShell({
             {user?.role === "admin" ? (
               <Link
                 href="/admin"
-                className="focus-ring m-1.5 flex min-h-12 flex-1 flex-col items-center justify-center gap-1 rounded-[var(--radius-sm)] border border-line bg-paper text-xs font-semibold text-ink"
+                className="focus-ring m-1.5 flex flex-1 flex-col items-center justify-center gap-1 rounded-[var(--radius-sm)] border border-line bg-paper text-xs font-semibold text-ink"
               >
                 <ShieldIcon className="h-5 w-5 text-accent" />
                 Админ

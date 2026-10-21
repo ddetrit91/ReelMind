@@ -1,4 +1,8 @@
-import { categoryCoverUrl } from "@/lib/categories";
+"use client";
+
+import { useState } from "react";
+
+import { categoryColor, categoryCoverUrl } from "@/lib/categories";
 
 type Props = {
   slug: string;
@@ -8,14 +12,32 @@ type Props = {
 };
 
 export function CategoryHero({ slug, name, emoji, itemCount }: Props) {
+  const [broken, setBroken] = useState(false);
+  const cover = categoryCoverUrl(slug);
+  const color = categoryColor(slug);
+
   return (
-    <div className="relative mb-5 overflow-hidden rounded-[var(--radius-lg)] lg:mb-6">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={categoryCoverUrl(slug)}
-        alt=""
-        className="h-36 w-full object-cover lg:h-48"
-      />
+    <div
+      className="relative mb-5 overflow-hidden rounded-[var(--radius-lg)] lg:mb-6"
+      style={
+        broken
+          ? {
+              background: `linear-gradient(135deg, ${color}cc 0%, ${color}66 45%, #0c0e14 100%)`,
+            }
+          : undefined
+      }
+    >
+      {!broken ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={cover}
+          alt=""
+          className="h-36 w-full object-cover lg:h-48"
+          onError={() => setBroken(true)}
+        />
+      ) : (
+        <div className="h-36 w-full lg:h-48" aria-hidden />
+      )}
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-black/10" />
       <div className="absolute inset-x-0 bottom-0 p-4 lg:p-6">
         <p className="font-display text-xl font-semibold text-white lg:text-2xl">

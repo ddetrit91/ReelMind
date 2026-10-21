@@ -25,7 +25,7 @@ const CATEGORY_COVERS: Record<string, string> = {
   finance:
     "https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?auto=format&fit=crop&w=1200&q=80",
   education:
-    "https://images.unsplash.com/photo-1456513080800-7d93d0e0470d?auto=format&fit=crop&w=1200&q=80",
+    "https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&w=1200&q=80",
   lifestyle:
     "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1200&q=80",
   other:

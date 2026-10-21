@@ -7,6 +7,13 @@ import { requireUser } from "@/lib/auth/session";
 import { deleteItem, updateItemCategory } from "@/lib/data/items";
 import { processIngest } from "@/lib/ingest/process-ingest";
 
+function revalidateCatalog() {
+  revalidatePath("/", "layout");
+  revalidatePath("/");
+  revalidatePath("/add");
+  revalidatePath("/items");
+}
+
 export async function ingestFromForm(
   _prev: { error?: string } | undefined,
   formData: FormData,
@@ -27,6 +34,7 @@ export async function ingestFromForm(
     return { error: result.error };
   }
 
+  revalidateCatalog();
   redirect(`/items/${result.id}`);
 }
 
@@ -36,16 +44,23 @@ export async function updateCategoryAction(itemId: string, categorySlug: string)
   if (!item) {
     return { error: "Не найдено" };
   }
+  revalidateCatalog();
   return { ok: true as const };
 }
 
-export async function deleteItemAction(itemId: string, returnTo = "/") {
+/** Deletes exactly one item by id. Returns status for client refresh (no redirect). */
+export async function deleteItemAction(itemId: string) {
+  const id = String(itemId ?? "").trim();
+  if (!id) {
+    return { error: "Некорректный id" };
+  }
+
   const user = await requireUser();
-  const deleted = await deleteItem(itemId, user.id);
+  const deleted = await deleteItem(id, user.id);
   if (!deleted) {
     return { error: "Не найдено" };
   }
-  revalidatePath("/");
-  revalidatePath("/items");
-  redirect(returnTo.startsWith("/") ? returnTo : "/");
+
+  revalidateCatalog();
+  return { ok: true as const, id };
 }

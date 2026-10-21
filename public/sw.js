@@ -1,6 +1,6 @@
 /* ReelMind — minimal offline shell for PWA install criteria */
-const CACHE = "reelmind-v1";
-const PRECACHE = ["/", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
+const CACHE = "reelmind-v2";
+const PRECACHE = ["/", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/add"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

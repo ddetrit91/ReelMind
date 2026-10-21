@@ -42,7 +42,7 @@ export function CategoryNav({
   if (variant === "rail") {
     return (
       <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:hidden">
-        <Link href={catalogHref(undefined, searchQuery)} className={linkClass(!activeSlug)}>
+        <Link href={catalogHref(undefined, searchQuery)} prefetch className={linkClass(!activeSlug)}>
           Все
           <span className="tabular-nums text-xs opacity-80">{totalCount}</span>
         </Link>
@@ -50,6 +50,7 @@ export function CategoryNav({
           <Link
             key={cat.id}
             href={catalogHref(cat.slug, searchQuery)}
+            prefetch
             className={linkClass(activeSlug === cat.slug)}
           >
             {!activeSlug || activeSlug !== cat.slug ? (
@@ -65,7 +66,7 @@ export function CategoryNav({
 
   return (
     <nav className="hidden lg:flex lg:flex-col lg:gap-1" aria-label="Категории">
-      <Link href={catalogHref(undefined, searchQuery)} className={linkClass(!activeSlug)}>
+      <Link href={catalogHref(undefined, searchQuery)} prefetch className={linkClass(!activeSlug)}>
         <span className="font-medium">Все</span>
         <span className="tabular-nums text-xs opacity-80">{totalCount}</span>
       </Link>
@@ -73,6 +74,7 @@ export function CategoryNav({
         <Link
           key={cat.id}
           href={catalogHref(cat.slug, searchQuery)}
+          prefetch
           className={linkClass(activeSlug === cat.slug)}
         >
           <span className="flex items-center gap-2 font-medium">

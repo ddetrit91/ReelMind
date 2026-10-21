@@ -1,4 +1,5 @@
 import { fetchInstagramMetadata } from "@/lib/instagram/metadata";
+import { cleanDisplayTitle, decodeHtmlEntities } from "@/lib/links/display-text";
 import {
   extractYoutubeVideoId,
   youtubeThumbnailUrl,
@@ -27,23 +28,14 @@ function metaContent(html: string, property: string): string | undefined {
   ];
   for (const pattern of patterns) {
     const match = html.match(pattern);
-    if (match?.[1]) return decodeHtml(match[1].trim());
+    if (match?.[1]) return decodeHtmlEntities(match[1].trim());
   }
   return undefined;
 }
 
-function decodeHtml(value: string): string {
-  return value
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
-}
-
 function documentTitle(html: string): string | undefined {
   const match = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-  return match?.[1] ? decodeHtml(match[1].trim()) : undefined;
+  return match?.[1] ? decodeHtmlEntities(match[1].trim()) : undefined;
 }
 
 function resolveMediaUrl(pageUrl: string, imageUrl?: string): string | undefined {
@@ -174,8 +166,18 @@ export async function fetchLinkMetadata(
     }
   }
 
-  const title = collected.title?.trim() || fallbackTitle(url);
-  const caption = captionFromShare ?? collected.caption ?? title;
+  const rawTitle = collected.title?.trim() || fallbackTitle(url);
+  const rawCaption = captionFromShare ?? collected.caption ?? rawTitle;
+  const title = cleanDisplayTitle(rawTitle, {
+    sourceKind,
+    shareText: captionFromShare,
+    fallback: sourceKind === "instagram" ? "Instagram Reels" : fallbackTitle(url),
+  });
+  const caption = cleanDisplayTitle(rawCaption, {
+    sourceKind,
+    shareText: captionFromShare,
+    fallback: title,
+  });
   const thumbnailUrl = resolveMediaUrl(url, collected.thumbnailUrl);
 
   return {

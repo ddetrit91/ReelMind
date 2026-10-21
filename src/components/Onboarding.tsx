@@ -50,7 +50,7 @@ function stepsFor(isAdmin: boolean): Step[] {
       title: "Добавить ссылку",
       where: "Синяя кнопка «Добавить» и плюс в шапке на телефоне.",
       why: "Так ссылка попадает в ваш архив с превью и категорией.",
-      how: "Вставьте URL. Категорию можно оставить ИИ или выбрать из списка.",
+      how: "Android: Поделиться в Instagram → ReelMind. iPhone: Поделиться → Скопировать ссылку → ReelMind → «Вставить из буфера» (PWA в меню Instagram на iOS не бывает — ограничение Apple).",
       icon: <PlusIcon className="h-5 w-5" />,
     },
     {

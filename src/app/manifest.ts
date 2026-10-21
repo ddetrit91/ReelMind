@@ -33,16 +33,12 @@ export default function manifest(): MetadataRoute.Manifest {
         type: "image/png",
         purpose: "maskable",
       },
-      {
-        src: "/icons/icon.svg",
-        sizes: "any",
-        type: "image/svg+xml",
-        purpose: "any",
-      },
     ],
+    // Works on Android Chrome / Samsung Internet. iOS Safari does NOT support share_target.
     share_target: {
       action: "/share",
       method: "GET",
+      enctype: "application/x-www-form-urlencoded",
       params: {
         title: "title",
         text: "text",

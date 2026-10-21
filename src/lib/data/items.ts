@@ -81,7 +81,13 @@ export async function listCategoriesWithCounts(userId: string): Promise<Category
     })
     .from(categories)
     .leftJoin(items, and(eq(items.categoryId, categories.id), eq(items.userId, userId)))
-    .groupBy(categories.id)
+    .groupBy(
+      categories.id,
+      categories.slug,
+      categories.name,
+      categories.emoji,
+      categories.sortOrder,
+    )
     .orderBy(categories.sortOrder);
 
   return rows;

@@ -9,6 +9,7 @@ import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { createSession, destroySession, getCurrentUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
+import { clearDemoItemsForUser } from "@/lib/demo/ensure-demo-items";
 import { getSettings } from "@/lib/settings";
 
 function safeNextPath(raw: FormDataEntryValue | null): string {
@@ -90,6 +91,8 @@ export async function loginAction(
   }
 
   await createSession(user.id);
+  // One-time cleanup: drop old seeded demos; user-added links stay.
+  await clearDemoItemsForUser(user.id);
   redirect(next);
 }
 

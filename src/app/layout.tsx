@@ -62,7 +62,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <head>
         <ThemeScript />
       </head>
-      <body className="min-h-full bg-paper text-ink">
+      <body className="min-h-dvh bg-paper text-ink">
         <PwaRegister />
         <ToastProvider>
           {children}

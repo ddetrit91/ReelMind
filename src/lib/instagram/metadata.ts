@@ -1,3 +1,5 @@
+import { cleanDisplayTitle } from "@/lib/links/display-text";
+
 /** Превью поста/Reels — best-effort через Instagram oEmbed; иначе UI fallback без категорийных stock-фото. */
 export async function fetchInstagramMetadata(
   url: string,
@@ -19,7 +21,13 @@ export async function fetchInstagramMetadata(
           title?: string;
           thumbnail_url?: string;
         };
-        title = data.title;
+        title = data.title
+          ? cleanDisplayTitle(data.title, {
+              sourceKind: "instagram",
+              shareText: captionFromShare,
+              fallback: "Instagram Reels",
+            })
+          : undefined;
         thumbnailUrl = data.thumbnail_url;
       }
     } catch {
@@ -27,9 +35,21 @@ export async function fetchInstagramMetadata(
     }
   }
 
+  // Prefer share text over cryptic OG/oEmbed titles when present
+  const displayTitle = cleanDisplayTitle(title ?? captionFromShare, {
+    sourceKind: "instagram",
+    shareText: captionFromShare,
+    fallback: "Instagram Reels",
+  });
+
   return {
-    title,
-    caption: captionFromShare ?? title,
+    title: displayTitle,
+    caption: captionFromShare
+      ? cleanDisplayTitle(captionFromShare, {
+          sourceKind: "instagram",
+          fallback: displayTitle,
+        })
+      : displayTitle,
     thumbnailUrl,
   };
 }

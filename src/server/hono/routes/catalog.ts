@@ -1,0 +1,105 @@
+import { Hono } from "hono";
+import { z } from "zod";
+
+import { deleteItem, getItemById, listCategoriesWithCounts, listItems, updateItemCategory } from "@/lib/data/items";
+import { assertIngestAuthorized } from "@/lib/env";
+import { processIngest } from "@/lib/ingest/process-ingest";
+import { getCurrentUser } from "@/lib/auth/session";
+import type { ApiEnv } from "@/server/hono/auth";
+import { requireUserMw } from "@/server/hono/auth";
+import { revalidateCatalog } from "@/server/hono/revalidate";
+
+const catalog = new Hono<ApiEnv>();
+
+catalog.get("/categories", requireUserMw, async (c) => {
+  const user = c.get("user");
+  const categories = await listCategoriesWithCounts(user.id);
+  return c.json({ categories });
+});
+
+catalog.get("/items", requireUserMw, async (c) => {
+  const user = c.get("user");
+  const category = c.req.query("category") || undefined;
+  const q = c.req.query("q") || undefined;
+  const base = await listItems(user.id, category);
+  const { searchItems } = await import("@/lib/search/item-search");
+  const items = await searchItems(base, q);
+  return c.json({ items });
+});
+
+catalog.get("/items/:id", requireUserMw, async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id");
+  if (!id) return c.json({ error: "Not found" }, 404);
+  const item = await getItemById(id, user.id);
+  if (!item) return c.json({ error: "Not found" }, 404);
+  return c.json({ item });
+});
+
+const patchSchema = z.object({
+  categorySlug: z.string().min(1),
+});
+
+catalog.patch("/items/:id", requireUserMw, async (c) => {
+  const user = c.get("user");
+  let body: z.infer<typeof patchSchema>;
+  try {
+    body = patchSchema.parse(await c.req.json());
+  } catch {
+    return c.json({ error: "Invalid body" }, 400);
+  }
+  const id = c.req.param("id");
+  if (!id) return c.json({ error: "Not found" }, 404);
+  const item = await updateItemCategory(id, body.categorySlug, user.id);
+  if (!item) return c.json({ error: "Not found" }, 404);
+  revalidateCatalog();
+  return c.json({ item });
+});
+
+catalog.delete("/items/:id", requireUserMw, async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id");
+  if (!id) return c.json({ error: "Not found" }, 404);
+  const deleted = await deleteItem(id, user.id);
+  if (!deleted) return c.json({ error: "Not found" }, 404);
+  revalidateCatalog();
+  return c.json({ ok: true });
+});
+
+const ingestSchema = z.object({
+  url: z.string().optional(),
+  text: z.string().optional(),
+  categorySlug: z.string().optional(),
+});
+
+catalog.post("/items/ingest", async (c) => {
+  const user = await getCurrentUser();
+  const secret = c.req.header("x-ingest-secret") ?? null;
+  if (!user && !assertIngestAuthorized(secret)) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+  if (!user) {
+    return c.json({ error: "Нужно войти в аккаунт" }, 401);
+  }
+
+  let body: z.infer<typeof ingestSchema>;
+  try {
+    body = ingestSchema.parse(await c.req.json());
+  } catch {
+    return c.json({ error: "Invalid body" }, 400);
+  }
+
+  const result = await processIngest({ ...body, userId: user.id });
+  if (!result.ok) {
+    return c.json({ error: result.error }, 400);
+  }
+
+  revalidateCatalog();
+  return c.json({
+    id: result.id,
+    categorySlug: result.categorySlug,
+    duplicate: result.duplicate ?? false,
+  });
+});
+
+export { catalog };

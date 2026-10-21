@@ -11,6 +11,7 @@ import { CategoryDot, ExternalIcon } from "@/components/icons";
 import { requireUser } from "@/lib/auth/session";
 import { categoryColor } from "@/lib/categories";
 import { getCategoriesForUi, getItemForUi } from "@/lib/data/ui-data";
+import { cleanDisplayTitle } from "@/lib/links/display-text";
 import { openSourceLabel } from "@/lib/links/parse-url";
 import { isWidePreview } from "@/lib/media";
 
@@ -38,10 +39,15 @@ export default async function ItemDetailPage({ params }: PageProps) {
 
   const total = categories.reduce((sum, c) => sum + c.itemCount, 0);
   const color = categoryColor(item.categorySlug);
+  const displayTitle = cleanDisplayTitle(item.title, {
+    sourceKind: item.sourceKind,
+    shareText: item.shareText,
+    fallback: "Сохранение",
+  });
 
   return (
     <AppShell
-      title={item.title ?? "Сохранение"}
+      title={displayTitle}
       categories={categories}
       activeCategorySlug={item.categorySlug}
       totalItems={total}
@@ -88,7 +94,10 @@ export default async function ItemDetailPage({ params }: PageProps) {
             ) : null}
             {item.shareText ? (
               <blockquote className="border-l-2 border-accent pl-4 text-sm leading-relaxed text-ink-muted">
-                {item.shareText}
+                {cleanDisplayTitle(item.shareText, {
+                  sourceKind: item.sourceKind,
+                  fallback: item.shareText,
+                })}
               </blockquote>
             ) : null}
             {item.aiTags?.length ? (

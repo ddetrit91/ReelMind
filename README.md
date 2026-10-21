@@ -44,7 +44,10 @@
 ### Добавление ссылок
 
 - **Вручную:** [http://localhost:3000/add](http://localhost:3000/add) — любой URL + опционально заметка.
-- **Share (PWA):** установите приложение на телефон (нужен HTTPS). Share target ведёт на `/share`. На localhost удобнее tunnel (ngrok / Cloudflare Tunnel) или `next dev -H 0.0.0.0` в LAN.
+- **Share (PWA):**
+  - **Android:** установите PWA → в Instagram «Поделиться» появится ReelMind (`share_target` → `/share`).
+  - **iPhone:** iOS **не** поддерживает Share Target — иконки в Instagram не будет. В Instagram: Поделиться → Скопировать ссылку → откройте ReelMind → «Вставить из буфера» на `/add`.
+  - На localhost для Android-теста нужен HTTPS/tunnel.
 
 ## Стек
 
@@ -52,14 +55,18 @@
 - SQLite `local.db` (libSQL) + Drizzle ORM
 - Vercel AI SDK
 
-## API (кратко)
+## API (Hono)
+
+Все `/api/*` обслуживает **Hono** (`src/server/hono`, catch-all `src/app/api/[[...route]]`).
 
 | Метод | Путь | Описание |
 |-------|------|----------|
+| GET | `/api/health` | Проверка API |
 | POST | `/api/items/ingest` | `{ url?, text? }`, нужна сессия |
 | GET | `/api/items?category=` | Список сохранений текущего пользователя |
 | GET | `/api/categories` | Категории и счётчики |
-| PATCH | `/api/items/[id]` | `{ categorySlug }` |
+| PATCH | `/api/items/:id` | `{ categorySlug }` |
+| DELETE | `/api/items/:id` | Удаление |
 
 Формы в UI используют Server Actions — секрет в браузер не нужен.
 

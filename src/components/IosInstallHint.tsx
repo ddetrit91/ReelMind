@@ -32,7 +32,7 @@ export function IosInstallHint() {
 
   return (
     <div
-      className="fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-50 mx-auto max-w-md rounded-2xl border border-line bg-surface/95 p-4 shadow-lg backdrop-blur-md lg:bottom-6 lg:left-auto lg:right-6"
+      className="fixed inset-x-3 bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px)+0.75rem)] z-50 mx-auto max-w-md rounded-2xl border border-line bg-surface/95 p-4 shadow-lg backdrop-blur-md lg:bottom-6 lg:left-auto lg:right-6"
       role="region"
       aria-label="Установка на iPhone"
     >
