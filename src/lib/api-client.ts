@@ -1,11 +1,13 @@
 "use client";
 
 const INGEST_SECRET =
-  typeof window !== "undefined"
-    ? process.env.NEXT_PUBLIC_INGEST_SECRET
-    : undefined;
+  typeof window !== "undefined" ? process.env.NEXT_PUBLIC_INGEST_SECRET : undefined;
 
-export async function ingestLink(payload: { url?: string; text?: string }) {
+export async function ingestLink(payload: {
+  url?: string;
+  text?: string;
+  categorySlug?: string;
+}) {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };

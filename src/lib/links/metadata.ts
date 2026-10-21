@@ -12,7 +12,8 @@ export type LinkMetadata = {
   thumbnailUrl?: string;
 };
 
-const FETCH_TIMEOUT_MS = 8000;
+/** Keep metadata enrichment snappy; slow hosts should not block UX. */
+const FETCH_TIMEOUT_MS = 2500;
 const MAX_HTML_BYTES = 400_000;
 
 function metaContent(html: string, property: string): string | undefined {

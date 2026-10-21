@@ -1,24 +1,11 @@
 "use client";
 
-import { useActionState, useCallback, useEffect, useState } from "react";
-import { useFormStatus } from "react-dom";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState, useTransition, type FormEvent } from "react";
 
-import { ingestFromForm } from "@/lib/actions";
+import { ingestLink } from "@/lib/api-client";
 import type { CategoryWithCount } from "@/lib/data/items";
 import { extractUrl } from "@/lib/links/parse-url";
-
-function SubmitButton() {
-  const { pending } = useFormStatus();
-  return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="btn-primary focus-ring inline-flex min-h-11 w-full items-center justify-center rounded-[var(--radius-md)] px-4 py-3 text-sm font-semibold disabled:opacity-60"
-    >
-      {pending ? "Сохраняем…" : "Сохранить и разложить по категории"}
-    </button>
-  );
-}
 
 function isIosDevice(): boolean {
   if (typeof navigator === "undefined") return false;
@@ -32,9 +19,12 @@ type Props = {
 };
 
 export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: Props) {
-  const [state, formAction] = useActionState(ingestFromForm, undefined);
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
   const [url, setUrl] = useState(initialUrl);
   const [text, setText] = useState(initialText);
+  const [categorySlug, setCategorySlug] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const [pasteHint, setPasteHint] = useState<string | null>(null);
   const [showIosTip, setShowIosTip] = useState(false);
 
@@ -45,7 +35,9 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
   const applyClipboard = useCallback(async (silent = false) => {
     try {
       if (!navigator.clipboard?.readText) {
-        if (!silent) setPasteHint("Буфер недоступен. Вставьте ссылку вручную (долгий тап → Вставить).");
+        if (!silent) {
+          setPasteHint("Буфер недоступен. Вставьте ссылку вручную (долгий тап → Вставить).");
+        }
         return false;
       }
       const raw = await navigator.clipboard.readText();
@@ -74,7 +66,6 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
     }
   }, [text]);
 
-  // When returning to the app from Instagram (iOS), try clipboard once if field empty.
   useEffect(() => {
     if (!isIosDevice() || url.trim()) return;
 
@@ -86,14 +77,33 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
 
     document.addEventListener("visibilitychange", tryPaste);
     window.addEventListener("focus", tryPaste);
-    // First open of /add on iOS
-    const t = window.setTimeout(() => void applyClipboard(true), 400);
+    const t = window.setTimeout(() => void applyClipboard(true), 200);
     return () => {
       document.removeEventListener("visibilitychange", tryPaste);
       window.removeEventListener("focus", tryPaste);
       window.clearTimeout(t);
     };
   }, [applyClipboard, url]);
+
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (pending) return;
+    setError(null);
+
+    startTransition(async () => {
+      try {
+        const result = await ingestLink({
+          url: url.trim() || undefined,
+          text: text.trim() || undefined,
+          categorySlug: categorySlug || undefined,
+        });
+        router.replace(`/items/${result.id}`);
+        router.refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Не удалось сохранить");
+      }
+    });
+  }
 
   return (
     <div className="space-y-4 lg:max-w-xl">
@@ -108,7 +118,9 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
             ReelMind. Рабочий путь:
           </p>
           <ol className="mt-2 list-decimal space-y-1 pl-5 text-ink-muted">
-            <li>В Instagram: Поделиться → <strong className="text-ink">Скопировать ссылку</strong></li>
+            <li>
+              В Instagram: Поделиться → <strong className="text-ink">Скопировать ссылку</strong>
+            </li>
             <li>Откройте ReelMind с домашнего экрана</li>
             <li>Нажмите «Вставить из буфера» ниже (или поле само подхватит ссылку)</li>
           </ol>
@@ -124,7 +136,7 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
       )}
 
       <form
-        action={formAction}
+        onSubmit={onSubmit}
         className="card-surface flex flex-col gap-5 rounded-[var(--radius-lg)] p-5 lg:p-7"
       >
         <label className="flex flex-col gap-2 text-sm">
@@ -165,10 +177,11 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
           <span className="font-medium text-ink">Категория</span>
           <select
             name="categorySlug"
-            defaultValue=""
+            value={categorySlug}
+            onChange={(e) => setCategorySlug(e.target.value)}
             className="focus-ring min-h-11 w-full rounded-[var(--radius-sm)] border border-line bg-paper px-3 py-2 text-base text-ink"
           >
-            <option value="">Автоматически — ИИ по ссылке и заметке</option>
+            <option value="">Автоматически по ссылке и заметке</option>
             {categories.map((cat) => (
               <option key={cat.id} value={cat.slug}>
                 {cat.emoji} {cat.name}
@@ -176,15 +189,21 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
             ))}
           </select>
           <span className="text-xs text-ink-muted">
-            Оставьте «Автоматически», если тема понятна. Выберите раздел сами, если ИИ может ошибиться.
+            Сохранение мгновенное; уточнение заголовка и категории догружается в фоне.
           </span>
         </label>
-        {state?.error ? (
+        {error ? (
           <p className="rounded-[var(--radius-sm)] bg-accent-soft px-3 py-2 text-sm text-ink">
-            {state.error}
+            {error}
           </p>
         ) : null}
-        <SubmitButton />
+        <button
+          type="submit"
+          disabled={pending}
+          className="btn-primary focus-ring inline-flex min-h-11 w-full items-center justify-center rounded-[var(--radius-md)] px-4 py-3 text-sm font-semibold disabled:opacity-60"
+        >
+          {pending ? "Сохраняем…" : "Сохранить"}
+        </button>
       </form>
     </div>
   );

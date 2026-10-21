@@ -8,9 +8,7 @@ import { deleteItem, updateItemCategory } from "@/lib/data/items";
 import { processIngest } from "@/lib/ingest/process-ingest";
 
 function revalidateCatalog() {
-  revalidatePath("/", "layout");
   revalidatePath("/");
-  revalidatePath("/add");
   revalidatePath("/items");
 }
 

@@ -7,6 +7,7 @@ import { AppShell } from "@/components/AppShell";
 import { ItemThumbnail } from "@/components/ItemThumbnail";
 import { CategorySelect } from "@/components/CategorySelect";
 import { DeleteItemButton } from "@/components/DeleteItemButton";
+import { ItemReadyPoller } from "@/components/ItemReadyPoller";
 import { CategoryDot, ExternalIcon } from "@/components/icons";
 import { requireUser } from "@/lib/auth/session";
 import { categoryColor } from "@/lib/categories";
@@ -79,6 +80,7 @@ export default async function ItemDetailPage({ params }: PageProps) {
         </div>
 
         <div className="mt-6 space-y-6 lg:mt-1">
+          <ItemReadyPoller itemId={item.id} status={item.status} />
           <div className="space-y-3">
             <p className="flex flex-wrap items-center gap-2 text-sm text-ink-muted">
               <span className="inline-flex items-center gap-1.5">

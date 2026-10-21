@@ -33,7 +33,8 @@ const KEYWORD_RULES: { slug: (typeof CATEGORY_SLUGS)[number]; words: string[] }[
   },
 ];
 
-function classifyWithKeywords(text: string): ClassificationResult {
+/** Sync keyword classify — used on the fast ingest path (no LLM wait). */
+export function classifyWithKeywords(text: string): ClassificationResult {
   const lower = text.toLowerCase();
   let bestSlug: (typeof CATEGORY_SLUGS)[number] = "other";
   let bestScore = 0;
