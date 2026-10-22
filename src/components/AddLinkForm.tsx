@@ -1,7 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type FormEvent,
+} from "react";
 
 import { ingestLink } from "@/lib/api-client";
 import type { CategoryWithCount } from "@/lib/data/items";
@@ -18,9 +26,16 @@ type Props = {
   categories: CategoryWithCount[];
   initialUrl?: string;
   initialText?: string;
+  /** Remount/reset key from the page (e.g. searchParams signature). */
+  formKey?: string;
 };
 
-export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: Props) {
+export function AddLinkForm({
+  categories,
+  initialUrl = "",
+  initialText = "",
+  formKey = "",
+}: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [url, setUrl] = useState(initialUrl);
@@ -29,24 +44,40 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
   const [error, setError] = useState<string | null>(null);
   const [pasteHint, setPasteHint] = useState<string | null>(null);
   const [showIosTip, setShowIosTip] = useState(false);
+  const autoPasteDone = useRef(false);
+  const skipNextAutoPaste = useRef(false);
+
+  const resetForm = useCallback(
+    (nextUrl = "", nextText = "") => {
+      setUrl(nextUrl);
+      setText(nextText);
+      setCategorySlug("");
+      setError(null);
+      setPasteHint(null);
+    },
+    [],
+  );
 
   useEffect(() => {
     setShowIosTip(isIosDevice());
   }, []);
 
-  // If opened with share leftovers in one field, split once
+  // Always sync to server props when opening /add (fixes stale URL after 2nd visit)
   useEffect(() => {
+    resetForm(initialUrl, initialText);
+    autoPasteDone.current = false;
+
     if (initialUrl || !initialText) return;
     const split = splitUrlAndNote(initialText);
     if (split.url) {
       setUrl(split.url);
       if (split.note) setText(split.note);
     }
-  }, [initialUrl, initialText]);
+  }, [formKey, initialUrl, initialText, resetForm]);
 
   const titlePreview = useMemo(() => headlineFromText(text, 90), [text]);
   const isInstagram = /instagram\.com/i.test(url);
-  const needsNoteHint = Boolean(url.trim()) && !text.trim();
+  const needsNoteHint = Boolean(url.trim()) && !text.trim() && isInstagram;
 
   const applyClipboard = useCallback(async (silent = false) => {
     try {
@@ -88,24 +119,29 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
     }
   }, []);
 
+  // iOS: one auto-paste per fresh empty form (not after we just saved)
   useEffect(() => {
-    if (!isIosDevice() || url.trim()) return;
+    if (!isIosDevice() || url.trim() || initialUrl.trim()) return;
+    if (autoPasteDone.current || skipNextAutoPaste.current) {
+      skipNextAutoPaste.current = false;
+      return;
+    }
 
     const tryPaste = () => {
-      if (document.visibilityState === "visible" && !url.trim()) {
-        void applyClipboard(true);
-      }
+      if (document.visibilityState !== "visible" || url.trim() || autoPasteDone.current) return;
+      autoPasteDone.current = true;
+      void applyClipboard(true);
     };
 
     document.addEventListener("visibilitychange", tryPaste);
     window.addEventListener("focus", tryPaste);
-    const t = window.setTimeout(() => void applyClipboard(true), 200);
+    const t = window.setTimeout(tryPaste, 200);
     return () => {
       document.removeEventListener("visibilitychange", tryPaste);
       window.removeEventListener("focus", tryPaste);
       window.clearTimeout(t);
     };
-  }, [applyClipboard, url]);
+  }, [applyClipboard, url, initialUrl, formKey]);
 
   function onUrlChange(value: string) {
     const split = splitUrlAndNote(value);
@@ -152,6 +188,14 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
           text: finalNote || undefined,
           categorySlug: categorySlug || undefined,
         });
+        // Clear before navigate so the next visit to /add is empty
+        skipNextAutoPaste.current = true;
+        resetForm();
+        try {
+          sessionStorage.setItem("reelmind:add-form-cleared", String(Date.now()));
+        } catch {
+          // ignore
+        }
         router.replace(`/items/${result.id}`);
         router.refresh();
       } catch (err) {
@@ -185,12 +229,13 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
           className="rounded-[var(--radius-lg)] border border-line bg-surface p-4 text-sm leading-relaxed text-ink-muted"
           role="note"
         >
-          На Android: Поделиться в Instagram → ReelMind — часто приходит и ссылка, и подпись. Если
-          подписи нет, напишите заметку: заголовок карточки возьмём из неё.
+          На Android после установки PWA ReelMind появится в «Поделиться» Instagram. На iPhone —
+          только через «Скопировать ссылку» и вставку сюда.
         </div>
       )}
 
       <form
+        key={formKey || "add-form"}
         onSubmit={onSubmit}
         className="card-surface flex flex-col gap-5 rounded-[var(--radius-lg)] p-5 lg:p-7"
       >
@@ -205,9 +250,11 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
             onPaste={onPasteUrl}
             placeholder="https://… Instagram, YouTube, статья"
             className="focus-ring min-h-11 rounded-[var(--radius-sm)] border border-line bg-paper px-3 py-2 text-base text-ink placeholder:text-ink-faint"
-            autoComplete="url"
+            autoComplete="off"
             inputMode="url"
             enterKeyHint="done"
+            autoCorrect="off"
+            spellCheck={false}
           />
           <button
             type="button"
@@ -222,9 +269,11 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
         <label className="flex flex-col gap-2 text-sm">
           <span className="font-medium text-ink">
             Заметка{" "}
-            {isInstagram || needsNoteHint ? (
+            {isInstagram ? (
               <span className="font-normal text-ink-muted">(если Instagram не отдал описание)</span>
-            ) : null}
+            ) : (
+              <span className="font-normal text-ink-muted">(необязательно)</span>
+            )}
           </span>
           <textarea
             name="text"
@@ -234,16 +283,17 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
             placeholder={
               isInstagram
                 ? "Напишите, о чём ролик — это станет заголовком карточки"
-                : "Необязательно. Помогает с заголовком и категорией"
+                : "Необязательно. Помогает с категорией"
             }
             className="focus-ring rounded-[var(--radius-sm)] border border-line bg-paper px-3 py-2 text-base text-ink placeholder:text-ink-faint"
+            autoComplete="off"
           />
           {needsNoteHint ? (
             <p className="text-xs text-ink-muted">
-              Метаданные могут не подтянуться. Короткая заметка → нормальный заголовок в каталоге.
+              Instagram часто не отдаёт заголовок. Короткая заметка → нормальное имя карточки.
             </p>
           ) : null}
-          {titlePreview ? (
+          {titlePreview && isInstagram ? (
             <p className="text-xs text-ink-muted">
               Заголовок карточки:{" "}
               <span className="font-medium text-ink">«{titlePreview}»</span>
@@ -259,13 +309,17 @@ export function AddLinkForm({ categories, initialUrl = "", initialText = "" }: P
             onChange={(e) => setCategorySlug(e.target.value)}
             className="focus-ring min-h-11 w-full rounded-[var(--radius-sm)] border border-line bg-paper px-3 py-2 text-base text-ink"
           >
-            <option value="">Автоматически по ссылке и заметке</option>
+            <option value="">Автоматически — ИИ по ссылке и заметке</option>
             {categories.map((cat) => (
               <option key={cat.id} value={cat.slug}>
                 {cat.emoji} {cat.name}
               </option>
             ))}
           </select>
+          <p className="text-xs leading-relaxed text-ink-muted">
+            Оставьте «Автоматически», если тема понятна. Выберите раздел сами, если ИИ может
+            ошибиться.
+          </p>
         </label>
 
         {error ? (

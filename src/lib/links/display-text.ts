@@ -173,6 +173,51 @@ export function isPlatformChromeTitle(text: string, sourceKind?: string): boolea
   return false;
 }
 
+/** Keyboard-mash / id blob: "kdfgkldjf44dfg", not a real word. */
+function isGibberishToken(token: string): boolean {
+  const t = token.toLowerCase().replace(/[^a-zа-яё0-9]/gi, "");
+  if (t.length < 6) return false;
+
+  if (/[а-яё]/i.test(t)) {
+    const letters = t.replace(/[^а-яё]/gi, "");
+    if (letters.length < 7) return false;
+    const vowels = (letters.match(/[аеёиоуыэюя]/gi) ?? []).length;
+    return vowels / letters.length < 0.12;
+  }
+
+  const letters = t.replace(/[^a-z]/g, "");
+  if (letters.length < 6) return false;
+  const vowels = (letters.match(/[aeiouy]/g) ?? []).length;
+  const digits = (t.match(/\d/g) ?? []).length;
+  if (vowels === 0) return true;
+  if (letters.length >= 8 && digits >= 1 && vowels / letters.length < 0.22) return true;
+  if (letters.length >= 12 && vowels / letters.length < 0.16) return true;
+  return false;
+}
+
+/**
+ * Random strings that platforms sometimes put in OG title/caption.
+ * Real titles ("Never Gonna Give You Up", "Как начать") stay.
+ */
+export function isGibberishText(text: string): boolean {
+  const tokens = text
+    .trim()
+    .split(/[\s,.;:|/\\]+/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+  if (tokens.length === 0) return false;
+
+  let junkChars = 0;
+  let allChars = 0;
+  for (const token of tokens) {
+    const size = token.replace(/\s/g, "").length;
+    allChars += size;
+    if (isGibberishToken(token)) junkChars += size;
+  }
+  if (allChars < 8) return false;
+  return junkChars / allChars >= 0.55;
+}
+
 /** Opaque URL ids / route crumbs that should never be shown as a title. */
 export function isJunkTitle(text: string, sourceKind?: string): boolean {
   const t = text.trim();
@@ -188,15 +233,18 @@ export function isJunkTitle(text: string, sourceKind?: string): boolean {
   if (/^tiktok$/i.test(t)) return true;
   if (/^youtube$/i.test(t)) return true;
   if (isPlatformChromeTitle(t, sourceKind)) return true;
+  if (isGibberishText(t)) return true;
   return false;
 }
 
 function stripPlatformNoise(text: string, sourceKind?: string): string {
   let t = text;
 
-  // "Username on Instagram: \"caption…\"" → caption
-  const onIg = t.match(/\bon\s+Instagram:\s*[«"“]?(.+?)[»"”]?\s*$/i);
-  if (onIg?.[1]) t = onIg[1].trim();
+  // "Username on Instagram: \"caption…\"" → caption (greedy: keep full text)
+  const onIg = t.match(/\bon\s+Instagram:\s*[«"“]?([\s\S]+)$/i);
+  if (onIg?.[1]) {
+    t = onIg[1].replace(/^[«"“]+/, "").replace(/[»"”]+$/u, "").trim();
+  }
 
   // "Title | Дзен" / "Title — Yandex Zen" / "Title • Dzen"
   t = t.replace(
@@ -295,10 +343,9 @@ export function cleanDisplayTitle(
   const fallback = options?.fallback ?? sourceFallback(options?.sourceKind);
   const share = options?.shareText?.trim();
 
-  // Note / share caption always wins over OG/oEmbed (Instagram often sends English chrome).
-  const preferred = share
-    ? [share, raw]
-    : [raw, share];
+  // When shareText is passed (Instagram note), it wins. Callers must NOT pass
+  // user notes as shareText for YouTube — that would hide the real video title.
+  const preferred = share ? [share, raw] : [raw];
 
   const candidates = preferred
     .filter((v): v is string => Boolean(v && v.trim()))

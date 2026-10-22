@@ -12,7 +12,7 @@ import { CategoryDot, ExternalIcon } from "@/components/icons";
 import { requireUser } from "@/lib/auth/session";
 import { categoryColor } from "@/lib/categories";
 import { getCategoriesForUi, getItemForUi } from "@/lib/data/ui-data";
-import { cleanDisplayTitle } from "@/lib/links/display-text";
+import { cleanDisplayTitle, isJunkTitle } from "@/lib/links/display-text";
 import { openSourceLabel } from "@/lib/links/parse-url";
 import { isWidePreview } from "@/lib/media";
 
@@ -40,11 +40,23 @@ export default async function ItemDetailPage({ params }: PageProps) {
 
   const total = categories.reduce((sum, c) => sum + c.itemCount, 0);
   const color = categoryColor(item.categorySlug);
-  const displayTitle = cleanDisplayTitle(item.title, {
+  const usableNote =
+    item.shareText?.trim() && !isJunkTitle(item.shareText, item.sourceKind)
+      ? item.shareText.trim()
+      : null;
+  const noteAsTitle =
+    usableNote &&
+    (item.sourceKind === "instagram" ||
+      item.sourceKind === "tiktok" ||
+      item.sourceKind === "dzen")
+      ? usableNote
+      : null;
+  const displayTitle = cleanDisplayTitle(item.title ?? item.caption, {
     sourceKind: item.sourceKind,
-    shareText: item.shareText,
+    shareText: noteAsTitle,
     fallback: "Сохранение",
   });
+  const summaryText = item.aiSummary?.trim() || "";
 
   return (
     <AppShell
@@ -67,7 +79,8 @@ export default async function ItemDetailPage({ params }: PageProps) {
             categorySlug={item.categorySlug}
             categoryEmoji={item.categoryEmoji}
             categoryName={item.categoryName}
-            title={item.title}
+            title={displayTitle}
+            hint={[item.caption, item.shareText, item.aiSummary].filter(Boolean).join("\n")}
             sourceKind={item.sourceKind}
             mediaKind={item.mediaKind}
             contentType={item.contentType}
@@ -89,17 +102,14 @@ export default async function ItemDetailPage({ params }: PageProps) {
               </span>
               <time dateTime={item.createdAt}>{formatDate(item.createdAt)}</time>
             </p>
-            {item.aiSummary ? (
+            {summaryText ? (
               <p className="max-w-prose text-base leading-relaxed text-ink-muted">
-                {item.aiSummary}
+                {summaryText}
               </p>
             ) : null}
-            {item.shareText ? (
+            {usableNote && usableNote !== displayTitle.trim() && usableNote !== summaryText ? (
               <blockquote className="border-l-2 border-accent pl-4 text-sm leading-relaxed text-ink-muted">
-                {cleanDisplayTitle(item.shareText, {
-                  sourceKind: item.sourceKind,
-                  fallback: item.shareText,
-                })}
+                {usableNote}
               </blockquote>
             ) : null}
             {item.aiTags?.length ? (

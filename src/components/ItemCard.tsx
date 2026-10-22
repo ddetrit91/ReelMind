@@ -32,9 +32,15 @@ export const ItemCard = memo(function ItemCard({ item, onDeleted }: Props) {
   const router = useRouter();
   const detailPrefetched = useRef(false);
   const [gone, setGone] = useState(false);
+  const noteAsTitle =
+    item.sourceKind === "instagram" ||
+    item.sourceKind === "tiktok" ||
+    item.sourceKind === "dzen"
+      ? item.shareText
+      : null;
   const label = cleanDisplayTitle(item.title ?? item.caption ?? item.aiSummary, {
     sourceKind: item.sourceKind,
-    shareText: item.shareText ?? item.caption,
+    shareText: noteAsTitle,
     fallback: sourceLabel(item.sourceKind, item.mediaKind),
   });
   const color = categoryColor(item.categorySlug);
@@ -65,7 +71,6 @@ export const ItemCard = memo(function ItemCard({ item, onDeleted }: Props) {
         onMouseEnter={warmDetailPage}
         onFocus={warmDetailPage}
       >
-        {/* Compact landscape cards — same size for every source/category */}
         <div className="relative aspect-[16/10] overflow-hidden bg-paper-deep lg:aspect-video">
           <div className="h-full w-full lg:transition lg:duration-300 lg:group-hover:scale-[1.03]">
             <ItemThumbnail
@@ -74,6 +79,7 @@ export const ItemCard = memo(function ItemCard({ item, onDeleted }: Props) {
               categoryEmoji={item.categoryEmoji}
               categoryName={item.categoryName}
               title={label}
+              hint={[item.caption, item.shareText, item.aiSummary].filter(Boolean).join("\n")}
               sourceKind={item.sourceKind}
               mediaKind={item.mediaKind}
               contentType={item.contentType}

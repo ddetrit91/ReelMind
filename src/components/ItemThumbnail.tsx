@@ -1,4 +1,9 @@
-import { categoryColor, categoryCoverUrl } from "@/lib/categories";
+"use client";
+
+import { useState } from "react";
+
+import { categoryColor } from "@/lib/categories";
+import { coverFromText } from "@/lib/links/text-cover";
 import { sourceLabel, type SourceKind } from "@/lib/links/parse-url";
 import type { ItemThumbnailFields } from "@/lib/thumbnails";
 import { itemThumbnailAlt } from "@/lib/thumbnails";
@@ -6,6 +11,8 @@ import { itemThumbnailAlt } from "@/lib/thumbnails";
 type Props = ItemThumbnailFields & {
   className?: string;
   aspectClassName?: string;
+  /** Extra text (caption, note, summary) used only to pick a fallback photo. */
+  hint?: string | null;
 };
 
 function mediaLabel(item: ItemThumbnailFields): string {
@@ -18,11 +25,13 @@ export function ItemThumbnail({
   categoryEmoji,
   categoryName,
   title,
+  hint,
   mediaKind,
   contentType,
   className = "",
   aspectClassName = "aspect-[3/4]",
 }: Props) {
+  const [failed, setFailed] = useState(false);
   const alt = itemThumbnailAlt({
     thumbnailUrl,
     categorySlug,
@@ -33,21 +42,27 @@ export function ItemThumbnail({
     contentType,
   });
   const color = categoryColor(categorySlug);
-  const coverUrl = categoryCoverUrl(categorySlug);
-  const imageUrl = thumbnailUrl || coverUrl;
+  const matched = coverFromText(title, hint, categorySlug);
+  const showSource = Boolean(thumbnailUrl) && !failed;
+  const imageUrl = showSource ? thumbnailUrl! : matched.url;
+  const categoryStandIn = !showSource && !matched.specific;
 
   if (imageUrl) {
     return (
       <div className={`relative h-full w-full ${aspectClassName} ${className}`}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
+          key={imageUrl}
           src={imageUrl}
           alt={alt}
           loading="lazy"
           decoding="async"
           className="h-full w-full object-cover"
+          onError={() => {
+            if (showSource) setFailed(true);
+          }}
         />
-        {!thumbnailUrl ? (
+        {categoryStandIn ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/25 px-3 text-center">
             <span className="text-3xl" aria-hidden>
               {categoryEmoji}

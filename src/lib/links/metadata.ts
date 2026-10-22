@@ -3,6 +3,7 @@ import {
   cleanDisplayTitle,
   decodeHtmlEntities,
   isJunkTitle,
+  isPlatformChromeTitle,
   quickDisplayTitle,
 } from "@/lib/links/display-text";
 import {
@@ -17,8 +18,8 @@ export type LinkMetadata = {
   thumbnailUrl?: string;
 };
 
-/** Keep metadata enrichment snappy; slow hosts should not block UX. */
-const FETCH_TIMEOUT_MS = 2800;
+const OEMBED_TIMEOUT_MS = 5000;
+const PAGE_TIMEOUT_MS = 12000;
 const MAX_HTML_BYTES = 500_000;
 
 function metaContent(html: string, property: string): string | undefined {
@@ -53,6 +54,16 @@ function resolveMediaUrl(pageUrl: string, imageUrl?: string): string | undefined
   }
 }
 
+function usableText(
+  value: string | null | undefined,
+  sourceKind?: SourceKind,
+): string | undefined {
+  const t = value?.trim();
+  if (!t) return undefined;
+  if (isJunkTitle(t, sourceKind) || isPlatformChromeTitle(t, sourceKind)) return undefined;
+  return t;
+}
+
 async function fetchYoutubeOembed(url: string): Promise<LinkMetadata> {
   const videoId = extractYoutubeVideoId(url);
   const fallbackThumb = videoId ? youtubeThumbnailUrl(videoId) : undefined;
@@ -61,28 +72,26 @@ async function fetchYoutubeOembed(url: string): Promise<LinkMetadata> {
     oembed.searchParams.set("url", url);
     oembed.searchParams.set("format", "json");
     const res = await fetch(oembed.toString(), {
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      signal: AbortSignal.timeout(OEMBED_TIMEOUT_MS),
       headers: { Accept: "application/json" },
     });
     if (!res.ok) return { thumbnailUrl: fallbackThumb };
-    const data = (await res.json()) as { title?: string; thumbnail_url?: string };
+    const data = (await res.json()) as {
+      title?: string;
+      thumbnail_url?: string;
+    };
     return {
-      title: data.title,
+      title: data.title?.trim() || undefined,
       thumbnailUrl: data.thumbnail_url ?? fallbackThumb,
-      caption: data.title,
     };
   } catch {
     return { thumbnailUrl: fallbackThumb };
   }
 }
 
-/**
- * Дзен: OG often blocked / noisy; try SSR `_params` JSON for real title.
- */
 function parseDzenSsr(html: string): LinkMetadata {
   const result: LinkMetadata = {};
 
-  // _params = ({...ssrData...})
   const paramsMatch = html.match(
     /(?:var|let|const)\s+_params\s*=\s*\(\s*(\{[\s\S]*?\})\s*\)\s*;?/,
   );
@@ -99,13 +108,13 @@ function parseDzenSsr(html: string): LinkMetadata {
         };
       };
       const meta = parsed.ssrData?.videoMetaResponse;
-      if (meta?.title && !isJunkTitle(meta.title)) result.title = meta.title;
+      if (meta?.title && !isJunkTitle(meta.title, "dzen")) result.title = meta.title;
       if (meta?.description) result.caption = meta.description;
       if (meta?.image || meta?.thumbnail) {
         result.thumbnailUrl = meta.image ?? meta.thumbnail;
       }
     } catch {
-      // fall through to regex probes
+      // fall through
     }
   }
 
@@ -115,7 +124,7 @@ function parseDzenSsr(html: string): LinkMetadata {
     );
     if (titleMatch?.[1]) {
       const title = decodeHtmlEntities(titleMatch[1].replace(/\\"/g, '"').replace(/\\n/g, " "));
-      if (!isJunkTitle(title)) result.title = title;
+      if (!isJunkTitle(title, "dzen")) result.title = title;
     }
   }
 
@@ -148,7 +157,8 @@ function parseHtmlMetadata(html: string, sourceKind?: SourceKind): LinkMetadata 
   const caption =
     fromSsr.caption ??
     metaContent(html, "og:description") ??
-    metaContent(html, "description");
+    metaContent(html, "description") ??
+    metaContent(html, "twitter:description");
 
   return { title, thumbnailUrl, caption };
 }
@@ -156,9 +166,10 @@ function parseHtmlMetadata(html: string, sourceKind?: SourceKind): LinkMetadata 
 async function fetchPageMetadata(
   url: string,
   sourceKind?: SourceKind,
+  timeoutMs = PAGE_TIMEOUT_MS,
 ): Promise<LinkMetadata> {
   const res = await fetch(url, {
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
     headers: {
       Accept: "text/html,application/xhtml+xml",
       "User-Agent":
@@ -187,10 +198,27 @@ async function fetchPageMetadata(
     if (done || !value) break;
     chunks.push(value);
     size += value.byteLength;
+    // YouTube puts OG tags near the top — stop early once we have them
+    if (sourceKind === "youtube" && size > 80_000) {
+      const partial = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf8");
+      const parsed = parseHtmlMetadata(partial, sourceKind);
+      if (parsed.title && parsed.caption) {
+        await reader.cancel().catch(() => undefined);
+        return parsed;
+      }
+    }
   }
   await reader.cancel().catch(() => undefined);
   const html = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf8");
   return parseHtmlMetadata(html, sourceKind);
+}
+
+export function sourcePrefersNoteTitle(sourceKind: SourceKind): boolean {
+  return (
+    sourceKind === "instagram" ||
+    sourceKind === "tiktok" ||
+    sourceKind === "dzen"
+  );
 }
 
 export async function fetchLinkMetadata(
@@ -198,22 +226,39 @@ export async function fetchLinkMetadata(
   sourceKind: SourceKind,
   shareText?: string,
 ): Promise<LinkMetadata> {
-  const captionFromShare = shareText?.trim() || undefined;
+  const note = shareText?.trim() || undefined;
   let collected: LinkMetadata = {};
 
   try {
     if (sourceKind === "instagram") {
       collected = await fetchInstagramMetadata(url, shareText);
     } else if (sourceKind === "youtube") {
-      collected = await fetchYoutubeOembed(url);
+      // oEmbed first (fast title+thumb), then page OG for description — don't block title on slow HTML
+      const oembed = await fetchYoutubeOembed(url);
+      collected = { ...oembed };
+      try {
+        const page = await fetchPageMetadata(url, "youtube", PAGE_TIMEOUT_MS);
+        collected = {
+          title: oembed.title ?? page.title,
+          thumbnailUrl: oembed.thumbnailUrl ?? page.thumbnailUrl,
+          caption: page.caption || undefined,
+        };
+      } catch {
+        // keep oembed-only
+      }
     } else if (sourceKind === "dzen") {
       collected = await fetchPageMetadata(url, "dzen");
+    } else {
+      collected = await fetchPageMetadata(url, sourceKind);
     }
   } catch {
-    // next fallback
+    // fall through
   }
 
-  if (!collected.title || !collected.thumbnailUrl) {
+  if (
+    sourceKind !== "youtube" &&
+    (!collected.title || !collected.thumbnailUrl || !collected.caption)
+  ) {
     try {
       const og = await fetchPageMetadata(url, sourceKind);
       collected = {
@@ -226,36 +271,44 @@ export async function fetchLinkMetadata(
     }
   }
 
-  const friendlyFallback = quickDisplayTitle(url, captionFromShare, sourceKind);
-  const rawTitle = collected.title?.trim();
-  const rawCaption = captionFromShare ?? collected.caption ?? rawTitle;
-  const thumbnailUrl = resolveMediaUrl(url, collected.thumbnailUrl);
-
-  // User note always becomes the card title (Instagram/Дзен/TikTok OG is often English junk).
-  if (captionFromShare) {
-    const title = quickDisplayTitle(url, captionFromShare, sourceKind);
-    const caption = cleanDisplayTitle(rawCaption, {
-      sourceKind,
-      shareText: captionFromShare,
-      fallback: title,
-    });
-    return { title, caption, thumbnailUrl };
+  if (sourceKind === "youtube" && !collected.thumbnailUrl) {
+    const id = extractYoutubeVideoId(url);
+    if (id) collected.thumbnailUrl = youtubeThumbnailUrl(id);
   }
+
+  const thumbnailUrl = resolveMediaUrl(url, collected.thumbnailUrl);
+  const friendlyFallback = quickDisplayTitle(url, note, sourceKind);
+
+  if (note && sourcePrefersNoteTitle(sourceKind)) {
+    const title = quickDisplayTitle(url, note, sourceKind);
+    const metaCaption = usableText(collected.caption, sourceKind);
+    return {
+      title,
+      caption: metaCaption && metaCaption !== title ? metaCaption : note,
+      thumbnailUrl,
+    };
+  }
+
+  // YouTube / articles: never let a leftover note override the real title
+  const rawTitle = usableText(collected.title, sourceKind) ?? collected.title?.trim();
+  const rawCaption = usableText(collected.caption, sourceKind);
 
   const title = cleanDisplayTitle(rawTitle, {
     sourceKind,
-    shareText: collected.caption,
     fallback: friendlyFallback,
   });
-  const caption = cleanDisplayTitle(rawCaption, {
-    sourceKind,
-    fallback: title,
-  });
+
+  // Prefer real description; if missing, keep title as caption (detail page still shows title)
+  const caption = rawCaption
+    ? cleanDisplayTitle(rawCaption, {
+        sourceKind,
+        fallback: title,
+      })
+    : title;
 
   return {
-    title:
-      title && !isJunkTitle(title, sourceKind) ? title : friendlyFallback,
-    caption,
+    title: title && !isJunkTitle(title, sourceKind) ? title : friendlyFallback,
+    caption: caption || title,
     thumbnailUrl,
   };
 }

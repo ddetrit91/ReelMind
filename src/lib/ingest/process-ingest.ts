@@ -1,18 +1,16 @@
 import { and, eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
-import { after } from "next/server";
 
 import { classifySavedItem, classifyWithKeywords } from "@/lib/ai/classify";
 import { CATEGORY_SEED, isCategorySlug } from "@/lib/categories";
 import { getDb } from "@/lib/db/client";
 import { categories, items } from "@/lib/db/schema";
 import { useMockData } from "@/lib/env";
+import { isJunkTitle, quickDisplayTitle } from "@/lib/links/display-text";
 import {
-  isJunkTitle,
-  isPlatformChromeTitle,
-  quickDisplayTitle,
-} from "@/lib/links/display-text";
-import { fetchLinkMetadata } from "@/lib/links/metadata";
+  fetchLinkMetadata,
+  sourcePrefersNoteTitle,
+} from "@/lib/links/metadata";
 import {
   extractUrl,
   extractYoutubeVideoId,
@@ -33,108 +31,31 @@ export type IngestResult =
   | { ok: true; id: string; categorySlug: string; duplicate?: boolean }
   | { ok: false; error: string };
 
+const AI_CLASSIFY_TIMEOUT_MS = 9000;
+
 function quickThumbnail(url: string, sourceKind: string): string | null {
   if (sourceKind !== "youtube") return null;
   const id = extractYoutubeVideoId(url);
   return id ? youtubeThumbnailUrl(id) : null;
 }
 
-function scheduleEnrich(task: () => Promise<void>) {
+async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    after(() => {
-      void task().catch((err) => console.error("[ingest enrich]", err));
-    });
-  } catch {
-    void task().catch((err) => console.error("[ingest enrich]", err));
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("timeout")), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
-}
-
-async function enrichSavedItem(input: {
-  id: string;
-  userId: string;
-  url: string;
-  shareText?: string;
-  sourceKind: Parameters<typeof fetchLinkMetadata>[1];
-  mediaKind: string;
-  contentType: string;
-  manualSlug?: string;
-}) {
-  const db = getDb();
-  const metadata = await fetchLinkMetadata(input.url, input.sourceKind, input.shareText);
-
-  let classification;
-  if (input.manualSlug && isCategorySlug(input.manualSlug)) {
-    const name = CATEGORY_SEED.find((c) => c.slug === input.manualSlug)?.name ?? "Другое";
-    classification = {
-      categorySlug: input.manualSlug,
-      tags: [name.toLowerCase()],
-      summary: metadata.caption ?? metadata.title ?? `Сохранённая ссылка (${name}).`,
-      confidence: 1,
-    };
-  } else {
-    try {
-      classification = await classifySavedItem({
-        url: input.url,
-        shareText: input.shareText,
-        caption: metadata.caption,
-        title: metadata.title,
-        sourceKind: input.sourceKind,
-        mediaKind: input.mediaKind as never,
-        contentType: input.contentType as never,
-      });
-    } catch (err) {
-      const fallback = classifyWithKeywords(
-        [input.url, metadata.title, metadata.caption, input.shareText].filter(Boolean).join("\n"),
-      );
-      classification = fallback;
-      console.error("[ingest enrich] classify failed", err);
-    }
-  }
-
-  const category = CATEGORY_SEED.find((c) => c.slug === classification.categorySlug);
-  const categoryId = category?.id ?? "cat-other";
-  const now = new Date().toISOString();
-
-  // Заметка всегда → заголовок. Без заметки — метаданные, но не английский UI Instagram/Дзен/TikTok.
-  const note = input.shareText?.trim();
-  const titleFromNote = note
-    ? quickDisplayTitle(input.url, note, input.sourceKind)
-    : null;
-  const metaTitle = metadata.title?.trim();
-  const usableMeta =
-    metaTitle &&
-    !isJunkTitle(metaTitle, input.sourceKind) &&
-    !isPlatformChromeTitle(metaTitle, input.sourceKind)
-      ? metaTitle
-      : null;
-  const nextTitle =
-    titleFromNote ||
-    usableMeta ||
-    quickDisplayTitle(input.url, null, input.sourceKind);
-  const nextCaption = note || metadata.caption || nextTitle;
-
-  await db
-    .update(items)
-    .set({
-      ...(nextTitle ? { title: nextTitle } : {}),
-      ...(nextCaption ? { caption: nextCaption } : {}),
-      ...(metadata.thumbnailUrl ? { thumbnailUrl: metadata.thumbnailUrl } : {}),
-      categoryId,
-      aiTags: classification.tags,
-      aiSummary: classification.summary,
-      classificationConfidence: classification.confidence,
-      status: "ready",
-      errorMessage: null,
-      updatedAt: now,
-    })
-    .where(and(eq(items.id, input.id), eq(items.userId, input.userId)));
-
-  revalidateCatalog();
 }
 
 /**
- * Fast ingest: duplicate check + insert in one round-trip, return immediately.
- * Metadata + AI classification run in the background via `after()`.
+ * Full ingest: metadata (title / description / thumb) + AI category before respond.
+ * Matches the reliable behaviour users expect from Add / Share.
  */
 export async function processIngest(input: IngestInput): Promise<IngestResult> {
   const rawUrl =
@@ -156,6 +77,9 @@ export async function processIngest(input: IngestInput): Promise<IngestResult> {
   }
 
   const db = getDb();
+  const rawNote = input.text?.trim() || undefined;
+  // Drop platform garbage that landed in the note field ("kdfgkldjf44dfg dfsg").
+  const note = rawNote && !isJunkTitle(rawNote) ? rawNote : undefined;
 
   const existing = await db
     .select({
@@ -179,24 +103,59 @@ export async function processIngest(input: IngestInput): Promise<IngestResult> {
   const manualSlug =
     input.categorySlug && isCategorySlug(input.categorySlug) ? input.categorySlug : undefined;
 
-  const hintText = [parsed.normalizedUrl, input.text].filter(Boolean).join("\n");
-  const classification = manualSlug
-    ? {
-        categorySlug: manualSlug,
-        tags: [
-          (CATEGORY_SEED.find((c) => c.slug === manualSlug)?.name ?? "Другое").toLowerCase(),
-        ],
-        summary: input.text?.trim() || `Сохранённая ссылка.`,
-        confidence: 1,
-      }
-    : classifyWithKeywords(hintText);
+  let metadata: Awaited<ReturnType<typeof fetchLinkMetadata>> = {};
+  try {
+    metadata = await fetchLinkMetadata(parsed.normalizedUrl, parsed.sourceKind, note);
+  } catch (err) {
+    console.error("[ingest] metadata failed", err);
+  }
+
+  const fallbackTitle = quickDisplayTitle(parsed.normalizedUrl, note, parsed.sourceKind);
+  const title =
+    (sourcePrefersNoteTitle(parsed.sourceKind) && note
+      ? quickDisplayTitle(parsed.normalizedUrl, note, parsed.sourceKind)
+      : metadata.title) ||
+    metadata.title ||
+    fallbackTitle;
+  const caption = metadata.caption || note || title;
+  const thumbnailUrl =
+    metadata.thumbnailUrl || quickThumbnail(parsed.normalizedUrl, parsed.sourceKind);
+
+  let classification;
+  if (manualSlug) {
+    const name = CATEGORY_SEED.find((c) => c.slug === manualSlug)?.name ?? "Другое";
+    classification = {
+      categorySlug: manualSlug,
+      tags: [name.toLowerCase()],
+      summary: caption || note || `Сохранённая ссылка (${name}).`,
+      confidence: 1,
+    };
+  } else {
+    const hintText = [parsed.normalizedUrl, title, caption, note].filter(Boolean).join("\n");
+    const keywordFallback = classifyWithKeywords(hintText);
+    try {
+      classification = await withTimeout(
+        classifySavedItem({
+          url: parsed.normalizedUrl,
+          shareText: note,
+          caption,
+          title,
+          sourceKind: parsed.sourceKind,
+          mediaKind: parsed.mediaKind,
+          contentType: parsed.contentType,
+        }),
+        AI_CLASSIFY_TIMEOUT_MS,
+      );
+    } catch (err) {
+      console.error("[ingest] classify timeout/fail, keywords", err);
+      classification = keywordFallback;
+    }
+  }
 
   const category = CATEGORY_SEED.find((c) => c.slug === classification.categorySlug);
   const categoryId = category?.id ?? "cat-other";
   const id = randomUUID();
   const now = new Date().toISOString();
-  const title = quickDisplayTitle(parsed.normalizedUrl, input.text, parsed.sourceKind);
-  const thumbnailUrl = quickThumbnail(parsed.normalizedUrl, parsed.sourceKind);
 
   await db.insert(items).values({
     id,
@@ -205,32 +164,21 @@ export async function processIngest(input: IngestInput): Promise<IngestResult> {
     sourceKind: parsed.sourceKind,
     mediaKind: parsed.mediaKind,
     contentType: parsed.contentType,
-    shareText: input.text ?? null,
-    caption: input.text?.trim() || title,
+    shareText: note ?? null,
+    caption,
     title,
     thumbnailUrl,
     categoryId,
     aiTags: classification.tags,
     aiSummary: classification.summary,
     classificationConfidence: classification.confidence,
-    status: "processing",
+    status: "ready",
     errorMessage: null,
     createdAt: now,
     updatedAt: now,
   });
 
-  scheduleEnrich(() =>
-    enrichSavedItem({
-      id,
-      userId: input.userId,
-      url: parsed.normalizedUrl,
-      shareText: input.text,
-      sourceKind: parsed.sourceKind,
-      mediaKind: parsed.mediaKind,
-      contentType: parsed.contentType,
-      manualSlug,
-    }),
-  );
+  revalidateCatalog();
 
   return {
     ok: true,
