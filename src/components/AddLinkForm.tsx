@@ -11,6 +11,8 @@ import {
   type FormEvent,
 } from "react";
 
+import { IngestStatus } from "@/components/IngestStatus";
+import { useIngestProgress } from "@/hooks/useIngestProgress";
 import { ingestLink } from "@/lib/api-client";
 import type { CategoryWithCount } from "@/lib/data/items";
 import { headlineFromText } from "@/lib/links/display-text";
@@ -44,6 +46,8 @@ export function AddLinkForm({
   const [error, setError] = useState<string | null>(null);
   const [pasteHint, setPasteHint] = useState<string | null>(null);
   const [showIosTip, setShowIosTip] = useState(false);
+  const [ingestUrl, setIngestUrl] = useState("");
+  const ingestProgress = useIngestProgress(pending, ingestUrl);
   const autoPasteDone = useRef(false);
   const skipNextAutoPaste = useRef(false);
 
@@ -181,6 +185,7 @@ export function AddLinkForm({
       return;
     }
 
+    setIngestUrl(finalUrl);
     startTransition(async () => {
       try {
         const result = await ingestLink({
@@ -199,6 +204,7 @@ export function AddLinkForm({
         router.replace(`/items/${result.id}`);
         router.refresh();
       } catch (err) {
+        setIngestUrl("");
         setError(err instanceof Error ? err.message : "Не удалось сохранить");
       }
     });
@@ -238,7 +244,18 @@ export function AddLinkForm({
         key={formKey || "add-form"}
         onSubmit={onSubmit}
         className="card-surface flex flex-col gap-5 rounded-[var(--radius-lg)] p-5 lg:p-7"
+        aria-busy={pending}
       >
+        {pending ? (
+          <IngestStatus
+            state="loading"
+            variant="inline"
+            message={ingestProgress.message}
+            detail={ingestProgress.detail}
+          />
+        ) : null}
+
+        <fieldset disabled={pending} className="flex min-w-0 flex-col gap-5 border-0 p-0 m-0">
         <label className="flex flex-col gap-2 text-sm">
           <span className="font-medium text-ink">Ссылка</span>
           <input
@@ -330,10 +347,21 @@ export function AddLinkForm({
         <button
           type="submit"
           disabled={pending}
-          className="btn-primary focus-ring inline-flex min-h-11 w-full items-center justify-center rounded-[var(--radius-md)] px-4 py-3 text-sm font-semibold disabled:opacity-60"
+          className="btn-primary focus-ring inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] px-4 py-3 text-sm font-semibold disabled:opacity-60"
         >
-          {pending ? "Сохраняем…" : "Сохранить"}
+          {pending ? (
+            <>
+              <span
+                className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
+                aria-hidden
+              />
+              Обработка…
+            </>
+          ) : (
+            "Сохранить"
+          )}
         </button>
+        </fieldset>
       </form>
     </div>
   );
