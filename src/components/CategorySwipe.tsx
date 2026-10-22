@@ -102,7 +102,8 @@ export function CategorySwipe({
       }
       applyTranslate(0, true);
       if (Math.abs(dx) < SWIPE_MIN) return;
-      goRef.current(dx > 0 ? 1 : -1);
+      // Finger left → next chip to the right; finger right → previous chip to the left.
+      goRef.current(dx < 0 ? 1 : -1);
     };
 
     wrap.addEventListener("touchstart", onStart, { passive: true });
