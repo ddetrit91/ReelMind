@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 
 import { categoryColor, categoryCoverUrl } from "@/lib/categories";
 
@@ -13,8 +13,12 @@ type Props = {
 
 export const CategoryHero = memo(function CategoryHero({ slug, name, emoji, itemCount }: Props) {
   const [broken, setBroken] = useState(false);
-  const cover = categoryCoverUrl(slug);
+  const cover = categoryCoverUrl(slug, name);
   const color = categoryColor(slug);
+
+  useEffect(() => {
+    setBroken(false);
+  }, [slug, name, cover]);
 
   return (
     <div
@@ -30,6 +34,7 @@ export const CategoryHero = memo(function CategoryHero({ slug, name, emoji, item
       {!broken ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
+          key={cover}
           src={cover}
           alt=""
           decoding="async"

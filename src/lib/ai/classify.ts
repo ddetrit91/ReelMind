@@ -2,25 +2,21 @@ import { generateObject } from "ai";
 import { z } from "zod";
 
 import { getChatModel } from "@/lib/ai/client";
-import { CATEGORY_SEED, CATEGORY_SLUGS } from "@/lib/categories";
-import type { ContentType, MediaKind, SourceKind } from "@/lib/links/parse-url";
+import type { SourceKind, MediaKind, ContentType } from "@/lib/links/parse-url";
 
-const slugTuple = CATEGORY_SLUGS as [string, ...string[]];
+export type ClassifyCategory = {
+  slug: string;
+  name: string;
+};
 
-const classificationSchema = z.object({
-  categorySlug: z.enum(slugTuple),
-  tags: z.array(z.string()).min(1).max(5),
-  summary: z.string().min(10).max(400),
-  confidence: z.number().min(0).max(1),
-});
+export type ClassificationResult = {
+  categorySlug: string;
+  tags: string[];
+  summary: string;
+  confidence: number;
+};
 
-export type ClassificationResult = z.infer<typeof classificationSchema>;
-
-function getModel() {
-  return getChatModel();
-}
-
-const KEYWORD_RULES: { slug: (typeof CATEGORY_SLUGS)[number]; words: string[] }[] = [
+const SYSTEM_KEYWORD_RULES: { slug: string; words: string[] }[] = [
   { slug: "health", words: ["здоров", "сон", "спорт", "питан", "fitness", "wellness"] },
   { slug: "motivation", words: ["мотив", "не сдавай", "mindset", "дисциплин", "успех"] },
   { slug: "business", words: ["бизнес", "продаж", "маркет", "стартап", "оффер", "клиент"] },
@@ -33,13 +29,22 @@ const KEYWORD_RULES: { slug: (typeof CATEGORY_SLUGS)[number]; words: string[] }[
   },
 ];
 
-/** Sync keyword classify — used on the fast ingest path (no LLM wait). */
-export function classifyWithKeywords(text: string): ClassificationResult {
+function fallbackOther(categories: ClassifyCategory[]): string {
+  return categories.find((c) => c.slug === "other")?.slug ?? categories[0]?.slug ?? "other";
+}
+
+/** Sync keyword classify — system rules + name match for personal categories. */
+export function classifyWithKeywords(
+  text: string,
+  categories: ClassifyCategory[],
+): ClassificationResult {
   const lower = text.toLowerCase();
-  let bestSlug: (typeof CATEGORY_SLUGS)[number] = "other";
+  const allowed = new Set(categories.map((c) => c.slug));
+  let bestSlug = fallbackOther(categories);
   let bestScore = 0;
 
-  for (const rule of KEYWORD_RULES) {
+  for (const rule of SYSTEM_KEYWORD_RULES) {
+    if (!allowed.has(rule.slug)) continue;
     const score = rule.words.reduce((acc, w) => (lower.includes(w) ? acc + 1 : acc), 0);
     if (score > bestScore) {
       bestScore = score;
@@ -47,7 +52,22 @@ export function classifyWithKeywords(text: string): ClassificationResult {
     }
   }
 
-  const name = CATEGORY_SEED.find((c) => c.slug === bestSlug)?.name ?? "Другое";
+  for (const cat of categories) {
+    if (cat.slug === "other" || SYSTEM_KEYWORD_RULES.some((r) => r.slug === cat.slug)) continue;
+    const name = cat.name.toLowerCase();
+    const tokens = name.split(/[\s,/|-]+/).filter((t) => t.length >= 3);
+    let score = 0;
+    if (name.length >= 3 && lower.includes(name)) score += 2;
+    for (const token of tokens) {
+      if (lower.includes(token)) score += 1;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestSlug = cat.slug;
+    }
+  }
+
+  const name = categories.find((c) => c.slug === bestSlug)?.name ?? "Другое";
   return {
     categorySlug: bestSlug,
     tags: [name.toLowerCase()],
@@ -64,7 +84,13 @@ export async function classifySavedItem(input: {
   sourceKind: SourceKind;
   mediaKind: MediaKind;
   contentType: ContentType;
+  categories: ClassifyCategory[];
 }): Promise<ClassificationResult> {
+  const categories = input.categories.length
+    ? input.categories
+    : [{ slug: "other", name: "Другое" }];
+  const slugs = categories.map((c) => c.slug);
+
   const context = [
     `URL: ${input.url}`,
     `Источник: ${input.sourceKind}`,
@@ -76,24 +102,36 @@ export async function classifySavedItem(input: {
     .filter(Boolean)
     .join("\n");
 
-  const model = getModel();
+  const model = getChatModel();
   if (!model) {
-    return classifyWithKeywords(context);
+    return classifyWithKeywords(context, categories);
   }
 
-  const categoryList = CATEGORY_SEED.map((c) => `${c.slug} — ${c.name}`).join(", ");
+  const categoryList = categories.map((c) => `${c.slug} — ${c.name}`).join(", ");
+  const schema = z.object({
+    categorySlug: z.string().refine((value) => slugs.includes(value), {
+      message: "Unknown category",
+    }),
+    tags: z.array(z.string()).min(1).max(5),
+    summary: z.string().min(10).max(400),
+    confidence: z.number().min(0).max(1),
+  });
 
   try {
     const { object } = await generateObject({
       model,
-      schema: classificationSchema,
-      system: `Ты классификатор сохранённых ссылок для личной базы знаний. Источники: Instagram, YouTube, статьи и любые URL. Выбери одну primary-категорию из списка: ${categoryList}. Ответ на русском в summary. Если не уверен — other.`,
+      schema,
+      system: `Ты классификатор сохранённых ссылок для личной базы знаний. Источники: Instagram, YouTube, статьи и любые URL. Выбери одну primary-категорию строго из списка (slug): ${categoryList}. Учитывай пользовательские категории так же, как системные. Ответ на русском в summary. Если не уверен — other.`,
       prompt: context,
     });
+
+    if (!slugs.includes(object.categorySlug)) {
+      return classifyWithKeywords(context, categories);
+    }
     return object;
   } catch (err) {
     console.error("AI classification failed, using keywords", err);
-    return classifyWithKeywords(context);
+    return classifyWithKeywords(context, categories);
   }
 }
 

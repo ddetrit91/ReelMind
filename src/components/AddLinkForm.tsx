@@ -11,6 +11,7 @@ import {
   type FormEvent,
 } from "react";
 
+import { AddCategoryControl } from "@/components/AddCategoryControl";
 import { IngestStatus } from "@/components/IngestStatus";
 import { useIngestProgress } from "@/hooks/useIngestProgress";
 import { ingestLink } from "@/lib/api-client";
@@ -43,6 +44,7 @@ export function AddLinkForm({
   const [url, setUrl] = useState(initialUrl);
   const [text, setText] = useState(initialText);
   const [categorySlug, setCategorySlug] = useState("");
+  const [categoryOptions, setCategoryOptions] = useState(categories);
   const [error, setError] = useState<string | null>(null);
   const [pasteHint, setPasteHint] = useState<string | null>(null);
   const [showIosTip, setShowIosTip] = useState(false);
@@ -65,6 +67,10 @@ export function AddLinkForm({
   useEffect(() => {
     setShowIosTip(isIosDevice());
   }, []);
+
+  useEffect(() => {
+    setCategoryOptions(categories);
+  }, [categories]);
 
   // Always sync to server props when opening /add (fixes stale URL after 2nd visit)
   useEffect(() => {
@@ -327,15 +333,26 @@ export function AddLinkForm({
             className="focus-ring min-h-11 w-full rounded-[var(--radius-sm)] border border-line bg-paper px-3 py-2 text-base text-ink"
           >
             <option value="">Автоматически — ИИ по ссылке и заметке</option>
-            {categories.map((cat) => (
+            {categoryOptions.map((cat) => (
               <option key={cat.id} value={cat.slug}>
                 {cat.emoji} {cat.name}
               </option>
             ))}
           </select>
+          <AddCategoryControl
+            variant="form"
+            onCreated={(cat) => {
+              setCategoryOptions((prev) => {
+                if (prev.some((c) => c.id === cat.id)) return prev;
+                return [...prev, cat].sort((a, b) => a.sortOrder - b.sortOrder);
+              });
+              setCategorySlug(cat.slug);
+              router.refresh();
+            }}
+          />
           <p className="text-xs leading-relaxed text-ink-muted">
             Оставьте «Автоматически», если тема понятна. Выберите раздел сами, если ИИ может
-            ошибиться.
+            ошибиться. Новую категорию можно создать кнопкой выше — она появится и в каталоге.
           </p>
         </label>
 

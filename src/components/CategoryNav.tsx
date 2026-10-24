@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { MouseEvent } from "react";
 
+import { AddCategoryControl } from "@/components/AddCategoryControl";
 import { CategoryDot } from "@/components/icons";
 import { categoryColor } from "@/lib/categories";
 import type { CategoryWithCount } from "@/lib/data/items";
@@ -15,6 +16,7 @@ type Props = {
   searchQuery?: string;
   /** Soft client navigation — skips full RSC reload when provided. */
   onSelectCategory?: (slug: string | undefined) => void;
+  onCategoryCreated?: (category: CategoryWithCount) => void;
 };
 
 function catalogHref(category?: string, searchQuery?: string) {
@@ -33,6 +35,7 @@ export function CategoryNav({
   variant,
   searchQuery,
   onSelectCategory,
+  onCategoryCreated,
 }: Props) {
   const softNav = Boolean(onSelectCategory);
   const linkClass = (active: boolean) =>
@@ -48,7 +51,6 @@ export function CategoryNav({
 
   function handleClick(event: MouseEvent<HTMLAnchorElement>, slug?: string) {
     if (!onSelectCategory) return;
-    // Keep native open-in-new-tab / modified clicks
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
       return;
     }
@@ -79,12 +81,14 @@ export function CategoryNav({
             className={linkClass(activeSlug === cat.slug)}
           >
             {!activeSlug || activeSlug !== cat.slug ? (
-              <CategoryDot color={categoryColor(cat.slug)} />
+              <CategoryDot color={categoryColor(cat.slug, cat.color)} />
             ) : null}
+            {cat.ownerUserId && cat.emoji ? <span aria-hidden>{cat.emoji}</span> : null}
             {cat.name}
             <span className="tabular-nums text-xs opacity-80">{cat.itemCount}</span>
           </Link>
         ))}
+        <AddCategoryControl variant="rail" onCreated={onCategoryCreated} />
       </div>
     );
   }
@@ -110,13 +114,17 @@ export function CategoryNav({
           onClick={(e) => handleClick(e, cat.slug)}
           className={linkClass(activeSlug === cat.slug)}
         >
-          <span className="flex items-center gap-2 font-medium">
-            {activeSlug !== cat.slug ? <CategoryDot color={categoryColor(cat.slug)} /> : null}
-            {cat.name}
+          <span className="flex min-w-0 items-center gap-2 font-medium">
+            {activeSlug !== cat.slug ? (
+              <CategoryDot color={categoryColor(cat.slug, cat.color)} />
+            ) : null}
+            {cat.ownerUserId && cat.emoji ? <span aria-hidden>{cat.emoji}</span> : null}
+            <span className="truncate">{cat.name}</span>
           </span>
           <span className="tabular-nums text-xs opacity-80">{cat.itemCount}</span>
         </Link>
       ))}
+      <AddCategoryControl variant="sidebar" onCreated={onCategoryCreated} />
     </nav>
   );
 }

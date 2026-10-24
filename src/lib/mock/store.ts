@@ -1,7 +1,14 @@
 // mock: replace with API when USE_MOCK_DATA=false
 import { randomUUID } from "crypto";
 
-import { CATEGORY_SEED } from "@/lib/categories";
+import {
+  CATEGORY_SEED,
+  MAX_USER_CATEGORIES,
+  USER_CATEGORY_SORT_BASE,
+  colorFromSlug,
+  isSystemCategorySlug,
+  slugifyCategoryName,
+} from "@/lib/categories";
 import type { CategoryWithCount, ItemWithCategory } from "@/lib/data/items";
 import type { IngestResult } from "@/lib/ingest/process-ingest";
 import { parseSourceUrl } from "@/lib/links/parse-url";
@@ -9,12 +16,88 @@ import { MOCK_ITEMS } from "@/lib/mock/items";
 import { demoThumbnailUrl } from "@/lib/thumbnails";
 
 let memoryItems: ItemWithCategory[] = [...MOCK_ITEMS];
+let memoryCategories: CategoryWithCount[] = CATEGORY_SEED.map((cat) => ({
+  ...cat,
+  itemCount: 0,
+  color: cat.color,
+  ownerUserId: null,
+}));
 
-export function mockGetCategories(): CategoryWithCount[] {
-  return CATEGORY_SEED.map((cat) => ({
-    ...cat,
-    itemCount: memoryItems.filter((i) => i.categorySlug === cat.slug).length,
-  }));
+function syncCounts(userId?: string): CategoryWithCount[] {
+  return memoryCategories
+    .filter((cat) => !cat.ownerUserId || (userId != null && cat.ownerUserId === userId))
+    .map((cat) => ({
+      ...cat,
+      itemCount: memoryItems.filter((i) => i.categorySlug === cat.slug).length,
+    }))
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+export function mockGetCategories(userId?: string): CategoryWithCount[] {
+  return syncCounts(userId);
+}
+
+export function mockGetCategoryBySlug(slug: string) {
+  const cat = memoryCategories.find((c) => c.slug === slug);
+  if (!cat) return null;
+  return {
+    id: cat.id,
+    slug: cat.slug,
+    name: cat.name,
+    emoji: cat.emoji,
+    sortOrder: cat.sortOrder,
+    color: cat.color ?? null,
+    ownerUserId: cat.ownerUserId ?? null,
+  };
+}
+
+export function mockCreateCategory(input: {
+  userId: string;
+  name: string;
+  emoji: string;
+}): { ok: true; category: CategoryWithCount } | { ok: false; error: string } {
+  const owned = memoryCategories.filter((c) => c.ownerUserId === input.userId);
+  if (owned.length >= MAX_USER_CATEGORIES) {
+    return {
+      ok: false,
+      error: `Можно создать не больше ${MAX_USER_CATEGORIES} своих категорий`,
+    };
+  }
+  if (
+    memoryCategories.some(
+      (c) =>
+        (!c.ownerUserId || c.ownerUserId === input.userId) &&
+        c.name.toLowerCase() === input.name.toLowerCase(),
+    )
+  ) {
+    return { ok: false, error: "Такая категория уже есть" };
+  }
+
+  let baseSlug = slugifyCategoryName(input.name);
+  if (isSystemCategorySlug(baseSlug)) baseSlug = `my-${baseSlug}`;
+  let slug = baseSlug;
+  let n = 1;
+  while (memoryCategories.some((c) => c.slug === slug)) {
+    n += 1;
+    slug = `${baseSlug}-${n}`;
+  }
+
+  const maxSort = owned.reduce(
+    (max, c) => Math.max(max, c.sortOrder),
+    USER_CATEGORY_SORT_BASE - 1,
+  );
+  const category: CategoryWithCount = {
+    id: `cat-u-${randomUUID()}`,
+    slug,
+    name: input.name,
+    emoji: input.emoji,
+    sortOrder: Math.min(98, maxSort + 1),
+    itemCount: 0,
+    color: colorFromSlug(slug),
+    ownerUserId: input.userId,
+  };
+  memoryCategories = [...memoryCategories, category];
+  return { ok: true, category };
 }
 
 export function mockListItems(categorySlug?: string): ItemWithCategory[] {
@@ -44,8 +127,8 @@ export function mockIngestItem(url: string, text?: string, categorySlug?: string
   const id = randomUUID();
   const now = new Date().toISOString();
   const cat =
-    CATEGORY_SEED.find((c) => c.slug === categorySlug) ??
-    CATEGORY_SEED.find((c) => c.slug === "other")!;
+    memoryCategories.find((c) => c.slug === categorySlug) ??
+    memoryCategories.find((c) => c.slug === "other")!;
   const item: ItemWithCategory = {
     id,
     sourceUrl: parsed.normalizedUrl,
@@ -77,7 +160,7 @@ export function mockUpdateCategory(
   id: string,
   categorySlug: string,
 ): ItemWithCategory | null {
-  const cat = CATEGORY_SEED.find((c) => c.slug === categorySlug);
+  const cat = memoryCategories.find((c) => c.slug === categorySlug);
   if (!cat) return null;
 
   memoryItems = memoryItems.map((item) =>

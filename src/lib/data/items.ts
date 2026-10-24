@@ -1,5 +1,6 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 
+import { getCategoryBySlugForUser } from "@/lib/data/categories";
 import { getDb } from "@/lib/db/client";
 import { categories, items } from "@/lib/db/schema";
 import { useMockData } from "@/lib/env";
@@ -36,6 +37,8 @@ export type CategoryWithCount = {
   emoji: string;
   sortOrder: number;
   itemCount: number;
+  color?: string | null;
+  ownerUserId?: string | null;
 };
 
 function mapItem(row: {
@@ -67,7 +70,7 @@ function mapItem(row: {
 }
 
 export async function listCategoriesWithCounts(userId: string): Promise<CategoryWithCount[]> {
-  if (useMockData()) return mockGetCategories();
+  if (useMockData()) return mockGetCategories(userId);
 
   const db = getDb();
   const rows = await db
@@ -77,16 +80,21 @@ export async function listCategoriesWithCounts(userId: string): Promise<Category
       name: categories.name,
       emoji: categories.emoji,
       sortOrder: categories.sortOrder,
+      color: categories.color,
+      ownerUserId: categories.ownerUserId,
       itemCount: sql<number>`count(${items.id})`.mapWith(Number),
     })
     .from(categories)
     .leftJoin(items, and(eq(items.categoryId, categories.id), eq(items.userId, userId)))
+    .where(or(isNull(categories.ownerUserId), eq(categories.ownerUserId, userId)))
     .groupBy(
       categories.id,
       categories.slug,
       categories.name,
       categories.emoji,
       categories.sortOrder,
+      categories.color,
+      categories.ownerUserId,
     )
     .orderBy(categories.sortOrder);
 
@@ -180,15 +188,10 @@ export async function updateItemCategory(
     return mockUpdateCategory(id, categorySlug);
   }
 
+  const cat = await getCategoryBySlugForUser(userId, categorySlug);
+  if (!cat) return null;
+
   const db = getDb();
-  const cat = await db
-    .select()
-    .from(categories)
-    .where(eq(categories.slug, categorySlug))
-    .limit(1);
-
-  if (!cat[0]) return null;
-
   const owned = await db
     .select({ id: items.id })
     .from(items)
@@ -200,7 +203,7 @@ export async function updateItemCategory(
   await db
     .update(items)
     .set({
-      categoryId: cat[0].id,
+      categoryId: cat.id,
       updatedAt: new Date().toISOString(),
       status: "ready",
     })

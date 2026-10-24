@@ -22,6 +22,8 @@ async function seed() {
         name: cat.name,
         emoji: cat.emoji,
         sortOrder: cat.sortOrder,
+        ownerUserId: null,
+        color: cat.color,
       })
       .onConflictDoUpdate({
         target: categories.slug,
@@ -29,6 +31,8 @@ async function seed() {
           name: cat.name,
           emoji: cat.emoji,
           sortOrder: cat.sortOrder,
+          ownerUserId: null,
+          color: cat.color,
         },
       });
   }

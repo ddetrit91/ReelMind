@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 
+import { createUserCategory } from "@/lib/data/categories";
 import { deleteItem, getItemById, listCategoriesWithCounts, listItems, updateItemCategory } from "@/lib/data/items";
 import { assertIngestAuthorized } from "@/lib/env";
 import { processIngest } from "@/lib/ingest/process-ingest";
@@ -27,6 +28,33 @@ catalog.get("/categories", requireUserMw, async (c) => {
   const user = c.get("user");
   const categories = await listCategoriesWithCounts(user.id);
   return c.json({ categories });
+});
+
+const createCategorySchema = z.object({
+  name: z.string().min(2).max(48),
+  emoji: z.string().max(8).optional(),
+});
+
+catalog.post("/categories", requireUserMw, async (c) => {
+  const user = c.get("user");
+  let body: z.infer<typeof createCategorySchema>;
+  try {
+    body = createCategorySchema.parse(await c.req.json());
+  } catch {
+    return c.json({ error: "Укажите название категории" }, 400);
+  }
+
+  const result = await createUserCategory({
+    userId: user.id,
+    name: body.name,
+    emoji: body.emoji,
+  });
+  if (!result.ok) {
+    return c.json({ error: result.error }, 400);
+  }
+
+  revalidateCatalog();
+  return c.json({ category: result.category }, 201);
 });
 
 catalog.get("/items", requireUserMw, async (c) => {

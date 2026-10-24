@@ -180,7 +180,7 @@ export function HomeCatalog({
     for (const cat of CATEGORY_SEED) {
       const img = new Image();
       img.decoding = "async";
-      img.src = categoryCoverUrl(cat.slug);
+      img.src = categoryCoverUrl(cat.slug, cat.name);
     }
   }, [router, user.role]);
 
@@ -228,6 +228,14 @@ export function HomeCatalog({
       title={active ? active.name : "Каталог"}
       subtitle={catalogSubtitle(active, total, query, items.length)}
       onSelectCategory={loadCategory}
+      onCategoryCreated={(cat) => {
+        startTransition(() => {
+          setCategories((prev) => {
+            if (prev.some((c) => c.id === cat.id)) return prev;
+            return [...prev, cat].sort((a, b) => a.sortOrder - b.sortOrder);
+          });
+        });
+      }}
     >
       <CategorySwipe
         categorySlugs={categories.map((c) => c.slug)}

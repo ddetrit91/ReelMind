@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 import { classifySavedItem, classifyWithKeywords } from "@/lib/ai/classify";
-import { CATEGORY_SEED, isCategorySlug } from "@/lib/categories";
+import { listCategoriesForUser, getCategoryBySlugForUser } from "@/lib/data/categories";
 import { getDb } from "@/lib/db/client";
 import { categories, items } from "@/lib/db/schema";
 import { useMockData } from "@/lib/env";
@@ -100,8 +100,15 @@ export async function processIngest(input: IngestInput): Promise<IngestResult> {
     };
   }
 
-  const manualSlug =
-    input.categorySlug && isCategorySlug(input.categorySlug) ? input.categorySlug : undefined;
+  const userCategories = await listCategoriesForUser(input.userId);
+  const classifyCategories = userCategories.map((c) => ({ slug: c.slug, name: c.name }));
+  const other =
+    userCategories.find((c) => c.slug === "other") ?? userCategories[userCategories.length - 1];
+
+  let manualCategory =
+    input.categorySlug?.trim()
+      ? await getCategoryBySlugForUser(input.userId, input.categorySlug.trim())
+      : null;
 
   let metadata: Awaited<ReturnType<typeof fetchLinkMetadata>> = {};
   try {
@@ -122,17 +129,16 @@ export async function processIngest(input: IngestInput): Promise<IngestResult> {
     metadata.thumbnailUrl || quickThumbnail(parsed.normalizedUrl, parsed.sourceKind);
 
   let classification;
-  if (manualSlug) {
-    const name = CATEGORY_SEED.find((c) => c.slug === manualSlug)?.name ?? "Другое";
+  if (manualCategory) {
     classification = {
-      categorySlug: manualSlug,
-      tags: [name.toLowerCase()],
-      summary: caption || note || `Сохранённая ссылка (${name}).`,
+      categorySlug: manualCategory.slug,
+      tags: [manualCategory.name.toLowerCase()],
+      summary: caption || note || `Сохранённая ссылка (${manualCategory.name}).`,
       confidence: 1,
     };
   } else {
     const hintText = [parsed.normalizedUrl, title, caption, note].filter(Boolean).join("\n");
-    const keywordFallback = classifyWithKeywords(hintText);
+    const keywordFallback = classifyWithKeywords(hintText, classifyCategories);
     try {
       classification = await withTimeout(
         classifySavedItem({
@@ -143,6 +149,7 @@ export async function processIngest(input: IngestInput): Promise<IngestResult> {
           sourceKind: parsed.sourceKind,
           mediaKind: parsed.mediaKind,
           contentType: parsed.contentType,
+          categories: classifyCategories,
         }),
         AI_CLASSIFY_TIMEOUT_MS,
       );
@@ -152,8 +159,12 @@ export async function processIngest(input: IngestInput): Promise<IngestResult> {
     }
   }
 
-  const category = CATEGORY_SEED.find((c) => c.slug === classification.categorySlug);
-  const categoryId = category?.id ?? "cat-other";
+  const category =
+    userCategories.find((c) => c.slug === classification.categorySlug) ?? other;
+  if (!category) {
+    return { ok: false, error: "Категории не настроены. Выполните db:seed." };
+  }
+
   const id = randomUUID();
   const now = new Date().toISOString();
 
@@ -168,7 +179,7 @@ export async function processIngest(input: IngestInput): Promise<IngestResult> {
     caption,
     title,
     thumbnailUrl,
-    categoryId,
+    categoryId: category.id,
     aiTags: classification.tags,
     aiSummary: classification.summary,
     classificationConfidence: classification.confidence,
@@ -183,6 +194,6 @@ export async function processIngest(input: IngestInput): Promise<IngestResult> {
   return {
     ok: true,
     id,
-    categorySlug: classification.categorySlug,
+    categorySlug: category.slug,
   };
 }

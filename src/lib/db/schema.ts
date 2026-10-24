@@ -53,13 +53,20 @@ export const appSettings = sqliteTable("app_settings", {
     .default(sql`(datetime('now'))`),
 });
 
-export const categories = sqliteTable("categories", {
-  id: text("id").primaryKey(),
-  slug: text("slug").notNull().unique(),
-  name: text("name").notNull(),
-  emoji: text("emoji").notNull().default("📁"),
-  sortOrder: integer("sort_order").notNull().default(0),
-});
+export const categories = sqliteTable(
+  "categories",
+  {
+    id: text("id").primaryKey(),
+    slug: text("slug").notNull().unique(),
+    name: text("name").notNull(),
+    emoji: text("emoji").notNull().default("📁"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    /** null = system category for everyone; set = personal category for that user only */
+    ownerUserId: text("owner_user_id").references(() => users.id, { onDelete: "cascade" }),
+    color: text("color"),
+  },
+  (table) => [index("categories_owner_idx").on(table.ownerUserId)],
+);
 
 export const items = sqliteTable(
   "items",

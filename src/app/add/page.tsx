@@ -3,7 +3,7 @@ export const instant = false;
 import { AppShell } from "@/components/AppShell";
 import { AddLinkFormHost } from "@/components/AddLinkFormHost";
 import { requireUser } from "@/lib/auth/session";
-import { CATEGORY_SEED } from "@/lib/categories";
+import { getCategoriesForUi } from "@/lib/data/ui-data";
 import { noteFromSharePayload } from "@/lib/links/share-content";
 
 type PageProps = {
@@ -12,16 +12,7 @@ type PageProps = {
 
 export default async function AddPage({ searchParams }: PageProps) {
   const [user, params] = await Promise.all([requireUser("/add"), searchParams]);
-
-  const categories = CATEGORY_SEED.map((cat) => ({
-    id: cat.id,
-    slug: cat.slug,
-    name: cat.name,
-    emoji: cat.emoji,
-    sortOrder: cat.sortOrder,
-    itemCount: 0,
-  }));
-
+  const categories = await getCategoriesForUi(user.id);
   const { url: initialUrl, note } = noteFromSharePayload(params);
 
   return (
@@ -29,7 +20,7 @@ export default async function AddPage({ searchParams }: PageProps) {
       title="Добавить"
       subtitle="Instagram, YouTube, статья или любой URL. Заметка помогает точнее выбрать категорию."
       categories={categories}
-      totalItems={0}
+      totalItems={categories.reduce((sum, c) => sum + c.itemCount, 0)}
       user={user}
     >
       <AddLinkFormHost

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { MouseEvent } from "react";
 
 import { UserAccountBlock } from "@/components/UserAccountBlock";
@@ -22,6 +22,7 @@ type Props = {
   searchQuery?: string;
   user?: AuthUser | null;
   onSelectCategory?: (slug: string | undefined) => void;
+  onCategoryCreated?: (category: CategoryWithCount) => void;
 };
 
 export function AppShell({
@@ -34,9 +35,19 @@ export function AppShell({
   searchQuery,
   user,
   onSelectCategory,
+  onCategoryCreated,
 }: Props) {
   const pageTitle = title ?? "Каталог";
   const pathname = usePathname();
+  const router = useRouter();
+
+  function handleCategoryCreated(category: CategoryWithCount) {
+    if (onCategoryCreated) {
+      onCategoryCreated(category);
+      return;
+    }
+    router.refresh();
+  }
 
   function onCatalogClick(event: MouseEvent<HTMLAnchorElement>) {
     if (pathname !== "/" || !onSelectCategory) return;
@@ -49,23 +60,25 @@ export function AppShell({
 
   return (
     <div className="min-h-dvh lg:flex">
-      <aside className="hidden lg:sticky lg:top-0 lg:flex lg:h-screen lg:w-[272px] lg:shrink-0 lg:flex-col lg:border-r lg:border-line lg:bg-surface/70 lg:px-5 lg:py-7 lg:backdrop-blur-md">
-        <Link
-          href="/"
-          prefetch
-          onClick={onCatalogClick}
-          className="focus-ring mb-8 flex items-start gap-3 rounded-[var(--radius-sm)] p-1"
-        >
-          <BookmarkMark className="mt-0.5 h-9 w-9 text-accent" />
-          <span>
-            <span className="font-display block text-[1.05rem] font-semibold leading-tight tracking-tight text-ink">
-              ReelMind
+      <aside className="hidden lg:sticky lg:top-0 lg:flex lg:h-dvh lg:max-h-dvh lg:w-[272px] lg:shrink-0 lg:flex-col lg:overflow-hidden lg:border-r lg:border-line lg:bg-surface/70 lg:backdrop-blur-md">
+        {/* Inner scroller keeps aside width fixed (no layout shift) and hosts themed scrollbar. */}
+        <div className="sidebar-scroll flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-5 py-7">
+          <Link
+            href="/"
+            prefetch
+            onClick={onCatalogClick}
+            className="focus-ring mb-8 flex items-start gap-3 rounded-[var(--radius-sm)] p-1"
+          >
+            <BookmarkMark className="mt-0.5 h-9 w-9 text-accent" />
+            <span>
+              <span className="font-display block text-[1.05rem] font-semibold leading-tight tracking-tight text-ink">
+                ReelMind
+              </span>
+              <span className="mt-1 block text-sm leading-snug text-ink-muted">
+                Архив ссылок по смыслу, не по ленте
+              </span>
             </span>
-            <span className="mt-1 block text-sm leading-snug text-ink-muted">
-              Архив ссылок по смыслу, не по ленте
-            </span>
-          </span>
-        </Link>
+          </Link>
         <CategoryNav
           categories={categories}
           activeSlug={activeCategorySlug}
@@ -73,31 +86,33 @@ export function AppShell({
           variant="sidebar"
           searchQuery={searchQuery}
           onSelectCategory={onSelectCategory}
+          onCategoryCreated={handleCategoryCreated}
         />
         <div className="mt-auto space-y-4 pt-8">
-          {user?.role === "admin" ? (
+            {user?.role === "admin" ? (
+              <Link
+                href="/admin"
+                prefetch
+                className="focus-ring inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] border border-line bg-paper px-4 text-sm font-medium text-ink hover:bg-accent-soft"
+              >
+                <ShieldIcon className="h-5 w-5 text-accent" />
+                Админка
+              </Link>
+            ) : null}
             <Link
-              href="/admin"
+              href="/add"
               prefetch
-              className="focus-ring inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] border border-line bg-paper px-4 text-sm font-medium text-ink hover:bg-accent-soft"
+              className="btn-primary focus-ring inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] px-4 text-sm font-semibold"
             >
-              <ShieldIcon className="h-5 w-5 text-accent" />
-              Админка
+              <PlusIcon className="h-4 w-4" />
+              Добавить ссылку
             </Link>
-          ) : null}
-          <Link
-            href="/add"
-            prefetch
-            className="btn-primary focus-ring inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] px-4 text-sm font-semibold"
-          >
-            <PlusIcon className="h-4 w-4" />
-            Добавить ссылку
-          </Link>
-          <div className="space-y-3">
-            {user ? <UserAccountBlock user={user} variant="sidebar" /> : null}
-            <div className="flex items-center gap-1">
-              <OnboardingTrigger />
-              <ThemeToggle />
+            <div className="space-y-3">
+              {user ? <UserAccountBlock user={user} variant="sidebar" /> : null}
+              <div className="flex items-center gap-1">
+                <OnboardingTrigger />
+                <ThemeToggle />
+              </div>
             </div>
           </div>
         </div>
@@ -148,6 +163,7 @@ export function AppShell({
                   variant="rail"
                   searchQuery={searchQuery}
                   onSelectCategory={onSelectCategory}
+                  onCategoryCreated={handleCategoryCreated}
                 />
               </div>
             ) : null}
