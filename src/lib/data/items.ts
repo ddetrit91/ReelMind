@@ -2,6 +2,7 @@ import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 
 import { getCategoryBySlugForUser } from "@/lib/data/categories";
 import { getDb } from "@/lib/db/client";
+import { ensureCategorySchema } from "@/lib/db/ensure-category-schema";
 import { categories, items } from "@/lib/db/schema";
 import { useMockData } from "@/lib/env";
 import type { SourceKind } from "@/lib/links/parse-url";
@@ -72,6 +73,7 @@ function mapItem(row: {
 export async function listCategoriesWithCounts(userId: string): Promise<CategoryWithCount[]> {
   if (useMockData()) return mockGetCategories(userId);
 
+  await ensureCategorySchema();
   const db = getDb();
   const rows = await db
     .select({

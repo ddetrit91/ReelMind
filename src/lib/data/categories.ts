@@ -11,6 +11,7 @@ import {
 } from "@/lib/categories";
 import type { CategoryWithCount } from "@/lib/data/items";
 import { getDb } from "@/lib/db/client";
+import { ensureCategorySchema } from "@/lib/db/ensure-category-schema";
 import { categories } from "@/lib/db/schema";
 import { useMockData } from "@/lib/env";
 import {
@@ -65,6 +66,7 @@ export async function listCategoriesForUser(userId: string): Promise<CategoryRow
     }));
   }
 
+  await ensureCategorySchema();
   const db = getDb();
   return db
     .select({
@@ -89,6 +91,7 @@ export async function getCategoryBySlugForUser(
     return mockGetCategoryBySlug(slug);
   }
 
+  await ensureCategorySchema();
   const db = getDb();
   const rows = await db
     .select({
@@ -126,6 +129,7 @@ export async function createUserCategory(
     return mockCreateCategory({ userId: input.userId, name, emoji });
   }
 
+  await ensureCategorySchema();
   const db = getDb();
   const existing = await listCategoriesForUser(input.userId);
   const userOwned = existing.filter((c) => c.ownerUserId === input.userId);
