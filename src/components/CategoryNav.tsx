@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { MouseEvent } from "react";
+import { useEffect, useRef, type MouseEvent } from "react";
 
 import { AddCategoryControl } from "@/components/AddCategoryControl";
 import { CategoryDot } from "@/components/icons";
@@ -28,6 +28,8 @@ function catalogHref(category?: string, searchQuery?: string) {
   return query ? `/?${query}` : "/";
 }
 
+const ALL_CHIP = "__all__";
+
 export function CategoryNav({
   categories,
   activeSlug,
@@ -38,6 +40,7 @@ export function CategoryNav({
   onCategoryCreated,
 }: Props) {
   const softNav = Boolean(onSelectCategory);
+  const railRef = useRef<HTMLDivElement>(null);
   const linkClass = (active: boolean) =>
     [
       "focus-ring transition-colors",
@@ -58,15 +61,43 @@ export function CategoryNav({
     onSelectCategory(slug);
   }
 
+  // Keep the active chip visible in the mobile rail when swiping categories.
+  useEffect(() => {
+    if (variant !== "rail") return;
+    const rail = railRef.current;
+    if (!rail) return;
+
+    const key = activeSlug ?? ALL_CHIP;
+    const chip = rail.querySelector(`[data-cat-chip="${CSS.escape(key)}"]`);
+    if (!(chip instanceof HTMLElement)) return;
+
+    const railBox = rail.getBoundingClientRect();
+    const chipBox = chip.getBoundingClientRect();
+    const fullyVisible =
+      chipBox.left >= railBox.left - 1 && chipBox.right <= railBox.right + 1;
+    if (fullyVisible) return;
+
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    chip.scrollIntoView({
+      behavior: reduceMotion ? "auto" : "smooth",
+      inline: "center",
+      block: "nearest",
+    });
+  }, [activeSlug, variant, categories]);
+
   if (variant === "rail") {
     return (
-      <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:hidden">
+      <div
+        ref={railRef}
+        className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:hidden"
+      >
         <Link
           href={catalogHref(undefined, searchQuery)}
           prefetch={!softNav}
           scroll={false}
           onClick={(e) => handleClick(e, undefined)}
           className={linkClass(!activeSlug)}
+          data-cat-chip={ALL_CHIP}
         >
           Все
           <span className="tabular-nums text-xs opacity-80">{totalCount}</span>
@@ -79,6 +110,7 @@ export function CategoryNav({
             scroll={false}
             onClick={(e) => handleClick(e, cat.slug)}
             className={linkClass(activeSlug === cat.slug)}
+            data-cat-chip={cat.slug}
           >
             {!activeSlug || activeSlug !== cat.slug ? (
               <CategoryDot color={categoryColor(cat.slug, cat.color)} />
